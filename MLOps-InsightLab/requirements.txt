@@ -1,0 +1,33 @@
+# Manipulación y análisis de datos
+pandas
+numpy
+scipy
+db-dtypes
+
+# Visualización
+matplotlib
+seaborn
+
+# Machine Learning
+scikit-learn
+xgboost
+catboost
+
+# Persistencia de modelos y tracking
+joblib
+mlflow
+
+# Notebooks
+notebook
+jupyter
+ipykernel
+ipywidgets
+
+# API y demo
+pydantic
+fastapi
+uvicorn[standard]
+streamlit
+
+# Configuración
+python-dotenv
