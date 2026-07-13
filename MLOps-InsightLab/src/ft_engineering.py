@@ -1,4 +1,5 @@
 #Librerias
+import numpy as np
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -12,7 +13,23 @@ def ft_engineering():
     df = cargar_datos()
 
     # Nuevas variables
+        # tiempo por página
     df['tiempo_por_pagina'] = df['time_on_site_sec']/df['pages_viewed']
+
+     # Segmentación de promociones de acuerdo a comportamiento del usuario
+
+    mediana_tiempo = df["time_on_site_sec"].median()
+    df["promocion_1"] = (
+    (df["user_type"] == 0) &
+    (df["added_to_cart"] == 1) &
+    (df['purchased'].astype(int) == 0) &
+    (df["time_on_site_sec"] > mediana_tiempo)
+     )
+    df["promocion_2"] = (
+    (df["user_type"] == 0) &
+    (df["device_type"] == 1) &
+    (df["time_on_site_sec"] > mediana_tiempo)
+        )
 
     # Variables seleccionadas para modelación
 
@@ -30,12 +47,14 @@ def ft_engineering():
         "added_to_cart",
         "rating",
         "payment_method",
-        "visit_month",
-        "visit_weekday",
         "visit_season",
+        "visit_day",
+        "visit_month",
         "session_duration_bucket",
         "location",
-        "tiempo_por_pagina"]
+        "tiempo_por_pagina",
+        "promocion_1",
+        "promocion_2"]
 
     # Definición de features/target split
     X = df[features] # features
@@ -48,7 +67,10 @@ def ft_engineering():
     # Variable categórica   
     cat_features = ['session_duration_bucket']
 
-
+    #  Transformación logarítmica solo en discount_amount
+    log_transformer = Pipeline(steps=[
+        ('log', FunctionTransformer(np.log1p, validate=False)), 
+        ])
     # Crear Pipelines
     # Pipeline 1 : Variables Categóricas
     cat_transformer = Pipeline(steps=[
@@ -57,6 +79,7 @@ def ft_engineering():
     ]
     )
     # Pipeline 2 : Variables numéricas
+    num_features_no_log = [col for col in num_features if col != 'discount_amount']
     num_transformer =  Pipeline(steps=[
         ('scaler',StandardScaler())
     ]
@@ -67,6 +90,7 @@ def ft_engineering():
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', num_transformer, num_features),
+            ('log_num', log_transformer,['discount_amount']),
             ('cat', cat_transformer, cat_features)
         ]
     )
@@ -82,4 +106,5 @@ def ft_engineering():
     X_test_processed = preprocessor.transform(X_test)
 
     return X_train_processed, X_test_processed, y_train, y_test, preprocessor
+
 
