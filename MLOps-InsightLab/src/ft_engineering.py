@@ -58,8 +58,9 @@ def ft_engineering():
         "visit_weekday",
         "visit_season",
         "location",
-        "promocion_1",
-        "promocion_2"]
+        #"promocion_1",
+        #"promocion_2"
+        ]
 
     # Definición de features/target split
     X = df[features] # features
