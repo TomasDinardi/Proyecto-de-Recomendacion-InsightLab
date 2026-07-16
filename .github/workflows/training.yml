@@ -1,13 +1,6 @@
 name: Entrenamiento de modelos
 
 on:
-  push:
-    branches:
-      - certification
-    paths:
-      - "MLOps-InsightLab/src/model_training.py"
-      - "MLOps-InsightLab/src/ft_engineering.py"
-
   pull_request:
     branches:
       - certification
