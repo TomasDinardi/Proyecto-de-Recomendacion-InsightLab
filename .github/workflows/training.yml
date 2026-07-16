@@ -10,6 +10,7 @@ on:
 
   pull_request:
     branches:
+      - certification
       - main
     paths:
       - "MLOps-InsightLab/src/model_training.py"
