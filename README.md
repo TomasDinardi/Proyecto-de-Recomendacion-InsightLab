@@ -133,3 +133,93 @@ Por ejemplo, `cart_abandoned` puede depender directamente de saber si el usuario
 ### Conclusión del EDA
 
 El análisis exploratorio permite concluir que el dataset se encuentra en buen estado para continuar con la preparación de variables. No se detectan problemas graves de duplicados, nulos o inconsistencias estructurales. La principal decisión técnica no está relacionada con imputación, sino con la selección cuidadosa de variables para evitar fuga de información y construir un modelo aplicable a un escenario real de predicción.
+
+## `ft_engineering.py`
+
+### Objetivo del archivo
+
+El archivo `ft_engineering.py` implementa el proceso de ingeniería de características y preprocesamiento de datos previo al entrenamiento de los modelos supervisados. Su propósito es transformar el conjunto de datos original en matrices de entrenamiento y prueba listas para la modelación, incorporando nuevas variables de negocio, seleccionando las características relevantes y aplicando un flujo de transformaciones reproducible mediante *pipelines*.
+
+---
+
+### Funcionamiento general
+
+El script define una función principal denominada `ft_engineering()`, la cual ejecuta de forma secuencial el proceso de preparación de datos para el modelo.
+
+El flujo desarrollado comprende las siguientes etapas:
+
+1. **Carga del dataset** mediante la función `cargar_datos()`.
+2. **Generación de nuevas características**, orientadas a representar patrones de navegación e intención de compra de los usuarios.
+3. **Selección de las variables** utilizadas durante la etapa de modelación.
+4. **Separación de variables predictoras (`X`) y variable objetivo (`y`)**.
+5. **División del conjunto de datos** en entrenamiento (80 %) y prueba (20 %), manteniendo la distribución de la variable objetivo mediante muestreo estratificado.
+6. **Construcción del pipeline de preprocesamiento**, donde se aplican las transformaciones necesarias sobre las variables.
+7. **Aplicación del preprocesamiento** sobre los conjuntos de entrenamiento y prueba.
+8. **Retorno de los datos procesados**, junto con el objeto `preprocessor`, el cual será reutilizado posteriormente durante la etapa de despliegue para garantizar consistencia entre entrenamiento e inferencia.
+
+---
+
+### Función principal
+
+#### `ft_engineering()`
+
+Realiza la preparación integral del conjunto de datos para el entrenamiento de modelos de clasificación.
+
+Las principales actividades desarrolladas por la función son:
+
+#### 1. Carga de datos 
+
+Obtiene el conjunto de datos procesado mediante la función `cargar_datos()`.
+
+#### 2. Ingeniería de características **
+
+Se generan nuevas variables que permiten representar mejor el comportamiento de los usuarios:
+
+- **`tiempo_por_pagina`**: calcula el tiempo promedio dedicado por el usuario a cada página visitada, permitiendo medir la intensidad de navegación.
+- **`promocion_1`**: identifica usuarios nuevos que agregaron productos al carrito, permanecieron un tiempo superior a la mediana del sitio y no finalizaron la compra.
+- **`promocion_2`**: identifica usuarios nuevos que navegan desde dispositivos móviles y presentan tiempos de navegación superiores a la mediana, representando un segmento potencial para promociones personalizadas.
+
+#### 3. Selección de variables
+
+Se seleccionan únicamente las variables que aportan información relevante para la predicción de la variable objetivo (`purchased`), eliminando variables redundantes o con fuga de información previamente identificadas durante el análisis exploratorio.
+
+#### 4. División del dataset
+
+El conjunto de datos se divide en:
+
+- Variables predictoras (`X`)
+- Variable objetivo (`y`)
+
+Posteriormente se realiza la separación en conjuntos de entrenamiento y prueba utilizando una partición del **80 % - 20 %**, manteniendo la proporción de ambas clases mediante muestreo estratificado.
+
+#### 5. Preprocesamiento
+
+Se construye un flujo de transformación utilizando `ColumnTransformer`, compuesto por:
+
+- **Pipeline numérico**
+  - Estandarización de las variables mediante `StandardScaler`.
+
+- **Pipeline de transformación logarítmica**
+  - Aplicación de `log1p` sobre la variable `discount_amount` para reducir la asimetría ocasionada por valores extremos.
+
+Finalmente, el preprocesador es ajustado sobre los datos de entrenamiento y posteriormente aplicado al conjunto de prueba.
+
+#### 6. Valor retornado
+
+La función retorna:
+
+| Variable | Descripción |
+|----------|-------------|
+| `X_train_processed` | Variables predictoras de entrenamiento preprocesadas. |
+| `X_test_processed` | Variables predictoras de prueba preprocesadas. |
+| `y_train` | Variable objetivo para entrenamiento. |
+| `y_test` | Variable objetivo para prueba. |
+| `preprocessor` | Pipeline completo de preprocesamiento utilizado durante entrenamiento e inferencia. |
+
+---
+
+### Ejecución directa
+
+Este archivo funciona como un módulo de preprocesamiento dentro del flujo de entrenamiento del proyecto y no está diseñado para ejecutarse de forma independiente.
+
+La función `ft_engineering()` es invocada desde el módulo `model_training.py`, donde los datos procesados son utilizados para entrenar y evaluar los diferentes modelos de clasificación implementados en el proyecto.
