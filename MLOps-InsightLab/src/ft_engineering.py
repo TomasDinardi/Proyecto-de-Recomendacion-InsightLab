@@ -58,8 +58,9 @@ def ft_engineering():
         "visit_weekday",
         "visit_season",
         "location",
-        "promocion_1",
-        "promocion_2"]
+        #"promocion_1",
+        #"promocion_2"
+        ]
 
     # Definición de features/target split
     X = df[features] # features
@@ -80,14 +81,21 @@ def ft_engineering():
     # Variables numéricas (el resto)
     num_features = [col for col in features if col not in cat_features]
 
-    #  Transformación logarítmica solo en discount_amount
+    # Transformación logarítmica solo en discount_amount
     log_transformer = Pipeline(steps=[
-        ('log', FunctionTransformer(np.log1p, validate=False)), 
-        ])
+        (
+            "log",
+            FunctionTransformer(
+                np.log1p,
+                validate=False,
+                feature_names_out="one-to-one"
+            )
+        )
+    ])
     # Crear Pipelines
     # Pipeline 1 : Variables Categóricas
     cat_transformer = Pipeline(steps=[
-        ('to_str', FunctionTransformer(lambda x: x.astype(str))),
+        ('to_str', FunctionTransformer(lambda x: x.astype(str), feature_names_out="one-to-one")),
         ('onehot', OneHotEncoder(handle_unknown='ignore', sparse_output=False))
     ]
     )
