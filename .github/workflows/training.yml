@@ -1,8 +1,20 @@
 name: Entrenamiento de modelos
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - certification
+    paths:
+      - "MLOps-InsightLab/src/model_training.py"
+      - "MLOps-InsightLab/src/ft_engineering.py"
 
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "MLOps-InsightLab/src/model_training.py"
+      - "MLOps-InsightLab/src/ft_engineering.py"
+      
 jobs:
   train-models:
     runs-on: ubuntu-latest
