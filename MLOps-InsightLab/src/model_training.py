@@ -2,6 +2,8 @@
 # LIBRERIAS
 #======================================================================================
 
+import pandas as pd
+
 from ft_engineering import ft_engineering
 
 from sklearn.linear_model import LogisticRegression
@@ -19,6 +21,10 @@ from sklearn.metrics import (
 from sklearn.tree import DecisionTreeClassifier
 
 from sklearn.ensemble import RandomForestClassifier
+
+from xgboost import XGBClassifier
+
+from sklearn.model_selection import train_test_split, StratifiedKFold, GridSearchCV
 
 #======================================================================================
 # ENTRENAMIENTO DE PRIMEROS MODELOS: SUPERVISADOS
@@ -135,7 +141,57 @@ def main():
 
     print("\nReporte de clasificación:")
     print(classification_report(y_test, y_pred_rf))
+    
+    # ============================================================
+    # XGBoost para determinar variables principales del clustering
+    # ============================================================
 
+    xgb_grid = XGBClassifier(
+        eval_metric="logloss",
+        random_state=42
+    )
+
+    param_grid = {
+        "n_estimators": [100, 200, 300],
+        "learning_rate": [0.01, 0.03, 0.05, 0.1],
+        "max_depth": [3, 4, 5],
+        "reg_alpha": [0, 0.1],
+        "reg_lambda": [1, 5]
+    }
+
+    cv = StratifiedKFold(
+        n_splits=5,
+        shuffle=True,
+        random_state=42
+    )
+
+    grid_search = GridSearchCV(
+        estimator=xgb_grid,
+        param_grid=param_grid,
+        scoring="roc_auc",
+        cv=cv,
+        n_jobs=-1,
+        verbose=1
+    )
+
+    grid_search.fit(X_train, y_train)
+
+    best_xgb = grid_search.best_estimator_
+
+    # Obtener los nombres de las variables después del preprocesamiento
+    nombres_variables = preprocessor.get_feature_names_out()
+
+    # Crear tabla de importancia de variables
+    importancia_xgb = pd.DataFrame({
+        "Variable": nombres_variables,
+        "Importancia": best_xgb.feature_importances_
+    }).sort_values(
+        by="Importancia",
+        ascending=False
+    ).reset_index(drop=True)
+
+    print("\nImportancia de variables según XGBoost:")
+    print(importancia_xgb.head(30))
 
 if __name__ == "__main__":
     main()
