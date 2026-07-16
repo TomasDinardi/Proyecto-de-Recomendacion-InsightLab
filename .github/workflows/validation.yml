@@ -55,4 +55,4 @@ jobs:
 
       - name: Ejecutar pipeline de feature engineering
         run: |
-          python -c "from src.ft_engineering import ft_engineering; ft_engineering()"
+          python src/ft_engineering.py
