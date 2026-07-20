@@ -76,7 +76,6 @@ En la revisión realizada, el dataset no presenta valores nulos que requieran im
 
 
 ![Dataset en números](images/data_1.png)
-<!-- 📷 Sugerencia de imagen: tabla "El dataset en números" (slide 5 del PPT de Sprint 1) -->
 
 
 
@@ -301,13 +300,567 @@ A diferencia de los cuatro modelos anteriores, este XGBoost no se utiliza como c
 
 
 
-> **Nota:** este script actualmente no registra las corridas en MLflow ni persiste (`joblib`/`pickle`) el modelo final seleccionado. Antes de la etapa de despliegue (API/Streamlit) es necesario definir qué modelo se guarda y cómo se versiona.
+> **Nota:** el registro de corridas en MLflow todavía no está implementado en este script. El guardado de los modelos entrenados (serialización a `.pkl`) se documenta más abajo, en la sección "Extracción y almacenamiento de modelos entrenados".
 
 
 
 ### Ejecución directa
 
 El script se ejecuta directamente (`python model_training.py`) e imprime en consola, para cada modelo, sus métricas, matriz de confusión y reporte de clasificación, junto con el ranking de importancia de variables del XGBoost.
+
+---
+
+## Automatización con GitHub Actions
+
+Para automatizar la validación del proyecto y reducir errores antes de integrar cambios en la rama principal, se implementaron workflows utilizando GitHub Actions.
+
+Los workflows se encuentran en:
+
+```text
+.github/
+└── workflows/
+    ├── validation.yml
+    └── training.yml
+```
+
+La automatización sigue el flujo de trabajo del repositorio:
+
+```text
+develop
+   ↓
+certification
+   ↓
+Pull Request
+   ↓
+main
+```
+
+### Evolución de los workflows
+
+Inicialmente, toda la validación del proyecto se realizaba mediante un único workflow. Este workflow verificaba la sintaxis, las dependencias y ejecutaba los principales procesos del proyecto, incluyendo el entrenamiento de los modelos.
+
+Sin embargo, el entrenamiento es un proceso más costoso y específico que las validaciones generales del código. Por este motivo, se decidió separar las responsabilidades en dos workflows:
+
+- `validation.yml`: validaciones generales y procesos básicos del proyecto.
+- `training.yml`: ejecución del entrenamiento cuando los cambios pueden afectar directamente a los modelos.
+
+Esta separación permite evitar que el entrenamiento se ejecute innecesariamente ante modificaciones que no afectan al modelado, como cambios en la documentación o en otros componentes del proyecto.
+
+### Workflow de validación (`validation.yml`)
+
+El workflow `validation.yml` realiza las validaciones generales del proyecto.
+
+Se ejecuta automáticamente en los siguientes casos:
+
+- Cuando se realiza un `push` a la rama `certification`.
+- Cuando se realiza un `push` a la rama `main`.
+- Cuando se crea o actualiza un Pull Request hacia `main`.
+
+El workflow realiza las siguientes tareas:
+
+1. Descarga el repositorio.
+2. Configura Python 3.11.
+3. Instala las dependencias definidas en `requirements.txt`.
+4. Verifica la sintaxis de los scripts Python mediante `compileall`.
+5. Comprueba que las principales dependencias del proyecto puedan importarse correctamente.
+6. Ejecuta el proceso de carga de datos.
+7. Ejecuta el pipeline de Feature Engineering.
+
+La estructura general del proceso es:
+
+```text
+Push / Pull Request
+        ↓
+Descarga del repositorio
+        ↓
+Configuración de Python 3.11
+        ↓
+Instalación de dependencias
+        ↓
+Verificación de sintaxis
+        ↓
+Verificación de imports
+        ↓
+Carga de datos
+        ↓
+Feature Engineering
+```
+
+#### Verificación de sintaxis
+
+Se utiliza:
+
+```bash
+python -m compileall src
+```
+
+Este comando compila los archivos Python del directorio `src` para comprobar que no existan errores de sintaxis.
+
+Esta validación permite detectar errores como:
+
+- Errores de indentación.
+- Paréntesis o corchetes sin cerrar.
+- Errores de sintaxis en el código.
+- Estructuras Python inválidas.
+
+#### Verificación de dependencias
+
+También se comprueba que las principales librerías utilizadas por el proyecto puedan importarse correctamente, entre ellas:
+
+- pandas.
+- numpy.
+- scipy.
+- scikit-learn.
+- matplotlib.
+- seaborn.
+- XGBoost.
+- CatBoost.
+- FastAPI.
+- Uvicorn.
+- Streamlit.
+
+Esto permite detectar problemas relacionados con dependencias faltantes, incompatibilidades o errores en la instalación del entorno.
+
+#### Ejecución de carga de datos
+
+Se ejecuta:
+
+```bash
+python src/cargar_datos.py
+```
+
+Esto permite comprobar que el proceso de carga del dataset funcione correctamente dentro del entorno de GitHub Actions.
+
+#### Ejecución de Feature Engineering
+
+El pipeline de transformación de variables también se ejecuta para verificar que:
+
+- Los datos puedan procesarse.
+- Las transformaciones funcionen.
+- El preprocesador pueda construirse.
+- Las variables necesarias para el modelado puedan generarse correctamente.
+
+### Workflow de entrenamiento (`training.yml`)
+
+El workflow `training.yml` se creó para separar el entrenamiento de modelos de las validaciones generales.
+
+Actualmente se ejecuta únicamente cuando se realiza un Pull Request hacia `main` y el cambio incluye modificaciones en alguno de los archivos directamente relacionados con el proceso de modelado:
+
+```text
+MLOps-InsightLab/src/model_training.py
+MLOps-InsightLab/src/ft_engineering.py
+```
+
+La configuración utiliza filtros de rutas (`paths`) para evitar ejecuciones innecesarias.
+
+Por lo tanto, el entrenamiento se ejecuta cuando:
+
+```text
+Pull Request → main
+        ↓
+Se modificó model_training.py
+        ↓
+Entrenamiento de modelos
+```
+
+o:
+
+```text
+Pull Request → main
+        ↓
+Se modificó ft_engineering.py
+        ↓
+Entrenamiento de modelos
+```
+
+En cambio, no se ejecuta si el Pull Request únicamente modifica archivos que no afectan al modelado, como:
+
+- `README.md`.
+- Documentación.
+- Archivos de presentación.
+- Otros componentes no relacionados con el entrenamiento.
+
+#### Proceso de entrenamiento
+
+El workflow realiza las siguientes tareas:
+
+1. Descarga el repositorio.
+2. Configura Python 3.11.
+3. Instala las dependencias del proyecto.
+4. Ejecuta:
+
+```bash
+python src/model_training.py
+```
+
+El entrenamiento se considera exitoso únicamente si el script finaliza correctamente.
+
+Si ocurre un error durante el entrenamiento:
+
+```text
+Error en model_training.py
+        ↓
+Workflow fallido
+        ↓
+Pull Request marcado como fallido
+        ↓
+El problema debe corregirse antes de integrar los cambios
+```
+
+Esto permite utilizar el entrenamiento como una validación automática de los cambios que pueden afectar directamente al modelo.
+
+### Flujo de validación de un Pull Request
+
+Cuando se realiza un Pull Request desde `certification` hacia `main`, los workflows se ejecutan según los archivos modificados.
+
+#### Cambio en la documentación
+
+```text
+Modificación de README.md
+        ↓
+Pull Request → main
+        ↓
+validation.yml
+```
+
+El entrenamiento no se ejecuta porque el cambio no afecta al modelo.
+
+#### Cambio en `model_training.py`
+
+```text
+Modificación de model_training.py
+        ↓
+Pull Request → main
+        ↓
+validation.yml
+        ↓
+training.yml
+```
+
+En este caso se ejecutan ambos workflows:
+
+- `validation.yml` verifica la integridad general del proyecto.
+- `training.yml` verifica que los modelos puedan entrenarse correctamente.
+
+#### Cambio en `ft_engineering.py`
+
+```text
+Modificación de ft_engineering.py
+        ↓
+Pull Request → main
+        ↓
+validation.yml
+        ↓
+training.yml
+```
+
+El entrenamiento también se ejecuta porque los cambios en Feature Engineering pueden modificar las variables de entrada del modelo y afectar el proceso de entrenamiento.
+
+### Objetivo de la separación
+
+La separación entre ambos workflows permite aplicar una validación más eficiente:
+
+```text
+Cambios generales
+        ↓
+validation.yml
+```
+
+```text
+Cambios que afectan al modelado
+        ↓
+validation.yml
+        +
+training.yml
+```
+
+De esta forma, el proyecto mantiene un proceso de integración controlado sin ejecutar innecesariamente procesos computacionalmente costosos.
+
+La lógica adoptada es:
+
+> Todo cambio debe pasar las validaciones generales del proyecto. Los cambios que pueden afectar directamente al entrenamiento de los modelos deben superar, además, una validación específica del proceso de entrenamiento antes de integrarse en `main`.
+
+### Beneficios de la automatización
+
+La implementación de GitHub Actions aporta:
+
+- Detección temprana de errores.
+- Validación automática de la sintaxis del código.
+- Comprobación de dependencias.
+- Validación de la carga y transformación de datos.
+- Verificación automática del entrenamiento de modelos.
+- Reducción de errores manuales.
+- Mayor reproducibilidad del entorno.
+- Protección de la rama `main` frente a cambios que no puedan ejecutarse correctamente.
+
+La automatización forma parte del pipeline MLOps del proyecto y constituye la base para futuras mejoras, como la incorporación de seguimiento de experimentos con MLflow, almacenamiento de artefactos de modelos, despliegue automatizado y monitoreo continuo.
+
+
+## Problemas con el historial de ramas y solución
+
+Durante la evolución del proyecto se presentó un problema relacionado con la historia de commits de las ramas principales del repositorio.
+
+El flujo de trabajo definido para el proyecto era:
+
+```text
+develop → certification → main
+```
+
+La idea era que los cambios se desarrollaran inicialmente en `develop`, luego fueran revisados y validados en `certification` y, finalmente, se incorporaran a `main`.
+
+Sin embargo, al intentar crear un Pull Request desde `develop` hacia `certification`, GitHub mostraba el siguiente mensaje:
+
+```text
+There isn't anything to compare.
+certification and develop are entirely different commit histories.
+```
+
+### Causa del problema
+
+El problema no estaba relacionado con el contenido de los archivos, sino con el historial de Git.
+
+Las ramas `develop` y `certification` habían sido creadas a partir de historias diferentes y no compartían un commit ancestro común.
+
+Aunque ambas ramas podían contener archivos relacionados con el mismo proyecto, desde el punto de vista de Git pertenecían a dos historias completamente independientes.
+
+Por esta razón, GitHub no podía calcular correctamente qué cambios de `develop` debían compararse con `certification` para generar un Pull Request.
+
+El mensaje:
+
+```text
+entirely different commit histories
+```
+
+indica precisamente que las ramas no tienen una historia común.
+
+---
+
+### Solución aplicada
+
+Para solucionar el problema se decidió unificar las historias de ambas ramas mediante un merge explícito.
+
+Primero se actualizó la información local del repositorio:
+
+```bash
+git fetch origin
+```
+
+Luego se cambió a la rama `develop` y se actualizaron sus cambios:
+
+```bash
+git checkout develop
+git pull origin develop
+```
+
+Posteriormente se fusionó la rama `certification` dentro de `develop`, permitiendo explícitamente la combinación de historias independientes:
+
+```bash
+git merge origin/certification --allow-unrelated-histories
+```
+
+La opción:
+
+```text
+--allow-unrelated-histories
+```
+
+fue necesaria porque Git detectaba que ambas ramas no tenían un ancestro común.
+
+Después del merge, si aparecían conflictos, se resolvían manualmente y se confirmaban los cambios:
+
+```bash
+git add .
+git commit
+```
+
+Finalmente, se actualizó la rama remota:
+
+```bash
+git push origin develop
+```
+
+---
+
+### Resultado
+
+Después de realizar la unión de las historias, las ramas pasaron a compartir una historia común.
+
+A partir de ese momento, GitHub pudo comparar correctamente las ramas y generar Pull Requests entre ellas.
+
+El flujo de integración quedó estructurado de la siguiente manera:
+
+```text
+develop
+   │
+   │ Pull Request
+   ▼
+certification
+   │
+   │ Pull Request
+   ▼
+main
+```
+
+---
+
+### Importancia de mantener una historia común
+
+Este problema demuestra la importancia de que las ramas de un mismo flujo de desarrollo se creen a partir de una historia común.
+
+Para evitar situaciones similares, las nuevas ramas deben crearse a partir de una rama existente del repositorio:
+
+```bash
+git checkout develop
+git pull origin develop
+git checkout -b nueva-rama
+```
+
+De esta manera, la nueva rama comparte automáticamente la historia de `develop` y Git puede comparar sus cambios mediante Pull Requests.
+
+---
+
+## Extracción y almacenamiento de modelos entrenados
+
+Como parte de la evolución del proyecto, se modificó el proceso de entrenamiento para guardar los modelos entrenados como archivos serializados con extensión:
+
+```text
+.pkl
+```
+
+El objetivo fue separar el proceso de entrenamiento del uso posterior de los modelos. De esta forma, los modelos pueden ser reutilizados por otros componentes del proyecto (como la API o la aplicación de visualización) sin necesidad de volver a entrenarlos cada vez.
+
+El flujo general pasó a ser:
+
+```text
+ft_engineering()
+      │
+      ▼
+Datos preprocesados
+      │
+      ▼
+Entrenamiento
+      │
+      ▼
+Evaluación
+      │
+      ▼
+Serialización del modelo
+      │
+      ▼
+models/*.pkl
+```
+
+Cada modelo entrenado se guarda utilizando serialización mediante `joblib`.
+
+Esto permite:
+
+* Reutilizar los modelos entrenados.
+* Evitar entrenamientos innecesarios.
+* Separar el entrenamiento de la inferencia.
+* Facilitar el uso de los modelos en otros componentes del proyecto.
+* Mantener una estructura más organizada para el despliegue.
+
+---
+
+## Problemas al subir los modelos a GitHub
+
+Durante el proceso de incorporación de los modelos entrenados al repositorio se presentó un problema relacionado con el tamaño de los archivos `.pkl`.
+
+Los modelos entrenados son archivos binarios y pueden alcanzar un tamaño considerable. Al intentar subirlos directamente mediante Git, GitHub rechazó la operación debido a las limitaciones de tamaño para archivos grandes.
+
+El problema estaba relacionado con que Git almacena normalmente los archivos completos dentro de su sistema de control de versiones. Esto no resulta eficiente para archivos binarios grandes, especialmente cuando los modelos pueden modificarse y volver a generarse durante el desarrollo.
+
+Por este motivo, se decidió utilizar **Git Large File Storage (Git LFS)**.
+
+---
+
+## Solución: Git LFS
+
+Git LFS es una extensión de Git diseñada para trabajar con archivos grandes, como:
+
+```text
+Modelos de Machine Learning
+Archivos binarios
+Datasets
+Imágenes de gran tamaño
+```
+
+En lugar de almacenar directamente el contenido completo del archivo pesado en el repositorio Git, Git LFS mantiene una referencia al archivo y administra su contenido de forma especializada.
+
+La estructura conceptual es:
+
+```text
+Repositorio Git
+      │
+      ├── Código fuente
+      ├── Configuración
+      ├── Documentación
+      └── Referencia al modelo
+
+Git LFS
+      │
+      └── Contenido real del archivo .pkl
+```
+
+De esta manera, los modelos continúan formando parte del proyecto y pueden ser versionados, pero sin almacenar su contenido binario de la misma forma que un archivo de código fuente.
+
+---
+
+### Configuración de los modelos para Git LFS
+
+Se configuró Git LFS para realizar el seguimiento de los archivos de modelos:
+
+```text
+*.pkl
+```
+
+Esto permite que los archivos con extensión `.pkl` sean gestionados por Git LFS en lugar del mecanismo tradicional de Git.
+
+Luego, los modelos pudieron ser agregados y versionados normalmente:
+
+```bash
+git add .
+git commit -m "Add trained models"
+git push
+```
+
+Git LFS se encarga de gestionar el almacenamiento de los archivos grandes mientras Git mantiene el seguimiento de sus referencias.
+
+---
+
+## Resultado final
+
+Después de configurar Git LFS y migrar los modelos existentes, los archivos `.pkl` quedaron correctamente gestionados mediante Git Large File Storage.
+
+La estructura del proyecto mantiene los modelos versionados:
+
+```text
+src/
+└── models/
+    ├── decision_tree.pkl
+    ├── logistic_regression.pkl
+    ├── logistic_regression_balanced.pkl
+    └── random_forest.pkl
+```
+
+Mientras que Git LFS se encarga del almacenamiento de los archivos binarios grandes.
+
+El flujo final quedó:
+
+```text
+Entrenamiento
+      │
+      ▼
+Modelo .pkl
+      │
+      ▼
+Git LFS
+      │
+      ▼
+GitHub
+```
+
+Esta solución permitió mantener los modelos dentro del repositorio del proyecto sin superar las limitaciones de Git para archivos grandes.
 
 ---
 
