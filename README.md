@@ -2,7 +2,7 @@
 
 ## Descripción general
 
-Este avance documenta los primeros componentes del flujo de trabajo del proyecto de recomendación y predicción de compra para un entorno e-commerce. El objetivo principal es preparar una base sólida para el análisis exploratorio, la ingeniería de características y el posterior entrenamiento de modelos supervisados orientados a predecir la variable `purchased`.
+Este avance documenta los componentes del flujo de trabajo del proyecto de recomendación y predicción de compra para un entorno e-commerce. El objetivo principal es preparar una base sólida para el análisis exploratorio, la ingeniería de características y el entrenamiento de modelos supervisados orientados a predecir la variable `purchased`, sobre una base de 25.000 sesiones de usuarios de e-commerce en India.
 
 Los archivos documentados son:
 
@@ -10,6 +10,7 @@ Los archivos documentados son:
 cargar_datos.py
 analisis_exploratorio.ipynb
 ft_engineering.py
+model_training.py
 ```
 
 ---
@@ -46,6 +47,7 @@ Ecommerce.csv
 
 De esta forma, el resto del proyecto puede importar y usar directamente `cargar_datos()` sin preocuparse por la ruta del archivo ni por la lógica de lectura.
 
+
 ### Ejecución directa
 
 Cuando el archivo se ejecuta directamente, realiza una revisión inicial del dataset mostrando:
@@ -71,6 +73,11 @@ El notebook `analisis_exploratorio.ipynb` desarrolla el análisis exploratorio i
 En primer lugar, se realiza una exploración general de la base, revisando cantidad de filas y columnas, primeras observaciones, tipos de datos, valores nulos y duplicados. Esta etapa permite validar si el dataset se encuentra en condiciones adecuadas para avanzar hacia el modelado.
 
 En la revisión realizada, el dataset no presenta valores nulos que requieran imputación. Esto puede deberse a que proviene de registros automáticos de una plataforma e-commerce o a que ya atravesó un proceso previo de limpieza y corrección. Variables como páginas vistas, tiempo en el sitio, compras, descuentos e ingresos suelen capturarse directamente desde eventos del sistema, reduciendo errores de carga manual. Además, valores como `0` en ingresos o abandono representan situaciones válidas del negocio, no datos faltantes.
+
+
+![Dataset en números](images/data_1.png)
+
+
 
 ### Análisis de variables
 
@@ -109,6 +116,10 @@ purchased
 
 Esta variable indica si una sesión terminó o no en compra. Durante el análisis exploratorio se revisa su distribución para comprender la proporción de sesiones con compra y sin compra. Esta revisión es importante porque permite detectar si existe desbalance de clases y anticipar posibles decisiones de modelado.
 
+
+![Dataset en números](images/data_2.png)
+
+
 ### Revisión de consistencia lógica
 
 También se revisa la coherencia entre variables relacionadas con el flujo de compra, especialmente aquellas asociadas al carrito, la compra y el abandono. Este tipo de validación permite detectar reglas de negocio inconsistentes, como compras sin carrito previo o sesiones marcadas simultáneamente como compra y abandono.
@@ -133,6 +144,8 @@ Por ejemplo, `cart_abandoned` puede depender directamente de saber si el usuario
 ### Conclusión del EDA
 
 El análisis exploratorio permite concluir que el dataset se encuentra en buen estado para continuar con la preparación de variables. No se detectan problemas graves de duplicados, nulos o inconsistencias estructurales. La principal decisión técnica no está relacionada con imputación, sino con la selección cuidadosa de variables para evitar fuga de información y construir un modelo aplicable a un escenario real de predicción.
+
+---
 
 ## `ft_engineering.py`
 
@@ -167,21 +180,38 @@ Realiza la preparación integral del conjunto de datos para el entrenamiento de 
 
 Las principales actividades desarrolladas por la función son:
 
-#### 1. Carga de datos 
+#### 1. Carga de datos
 
 Obtiene el conjunto de datos procesado mediante la función `cargar_datos()`.
 
-#### 2. Ingeniería de características **
+#### 2. Ingeniería de características
 
-Se generan nuevas variables que permiten representar mejor el comportamiento de los usuarios:
+Se genera una nueva variable de comportamiento:
 
 - **`tiempo_por_pagina`**: calcula el tiempo promedio dedicado por el usuario a cada página visitada, permitiendo medir la intensidad de navegación.
-- **`promocion_1`**: identifica usuarios nuevos que agregaron productos al carrito, permanecieron un tiempo superior a la mediana del sitio y no finalizaron la compra.
-- **`promocion_2`**: identifica usuarios nuevos que navegan desde dispositivos móviles y presentan tiempos de navegación superiores a la mediana, representando un segmento potencial para promociones personalizadas.
+- **`visit_month`, `visit_weekday`, `visit_season`**: variables derivadas de `visit_date`, que capturan patrones de estacionalidad y comportamiento semanal en la navegación.
+
+Adicionalmente, se definen dos **reglas de negocio** (no variables de modelado):
+
+- **`promocion_1`**: identifica usuarios nuevos que agregaron productos al carrito, permanecieron un tiempo superior a la mediana del sitio y no finalizaron la compra. Al depender de `purchased` en su propia fórmula, no puede usarse como input del modelo (fuga de información).
+- **`promocion_2`**: identifica usuarios nuevos que navegan desde dispositivos móviles y presentan tiempos de navegación superiores a la mediana. Aunque no depende de `purchased`, es una combinación de variables ya existentes en el dataset (`user_type`, `device_type`, `time_on_site_sec`), por lo que tampoco se incluye como input: representa la regla de negocio a aplicar sobre los resultados del modelo, no un dato de comportamiento nuevo. 
+La elección de **qué categoría de producto** promocionar dentro de este segmento queda a criterio del negocio (por ejemplo, según temporada o stock disponible), y no forma parte de la fórmula que determina la pertenencia al segmento.
+
+Ambas reglas se calculan y documentan en esta etapa, pero se excluyen explícitamente en la selección de variables del paso siguiente.
+
+
+![promocion](images/data_4.png)
+
+
 
 #### 3. Selección de variables
 
 Se seleccionan únicamente las variables que aportan información relevante para la predicción de la variable objetivo (`purchased`), eliminando variables redundantes o con fuga de información previamente identificadas durante el análisis exploratorio.
+
+
+![variables excluyente](images/data_3.png)
+
+
 
 #### 4. División del dataset
 
@@ -191,6 +221,8 @@ El conjunto de datos se divide en:
 - Variable objetivo (`y`)
 
 Posteriormente se realiza la separación en conjuntos de entrenamiento y prueba utilizando una partición del **80 % - 20 %**, manteniendo la proporción de ambas clases mediante muestreo estratificado.
+
+
 
 #### 5. Preprocesamiento
 
@@ -202,7 +234,16 @@ Se construye un flujo de transformación utilizando `ColumnTransformer`, compues
 - **Pipeline de transformación logarítmica**
   - Aplicación de `log1p` sobre la variable `discount_amount` para reducir la asimetría ocasionada por valores extremos.
 
+- **Pipeline categórico**
+  - Codificación de las variables categóricas mediante `OneHotEncoder`, permitiendo representarlas correctamente para el modelo.
+
 Finalmente, el preprocesador es ajustado sobre los datos de entrenamiento y posteriormente aplicado al conjunto de prueba.
+
+##### Nota sobre variables temporales
+
+A partir de `visit_date` se generan las variables derivadas `visit_month`, `visit_weekday` y `visit_season`. `visit_date` se conserva también en el dataset, transformada a un valor ordinal (`pd.Timestamp.toordinal`) para poder ser utilizada por modelos numéricos.
+
+Mantener las cuatro variables temporales, aun existiendo cierta redundancia entre ellas, no representa un problema dado el tamaño acotado del dataset (25.000 sesiones): los modelos basados en árboles pueden identificar y descartar por sí mismos las variables que no aporten información relevante.
 
 #### 6. Valor retornado
 
@@ -223,6 +264,49 @@ La función retorna:
 Este archivo funciona como un módulo de preprocesamiento dentro del flujo de entrenamiento del proyecto y no está diseñado para ejecutarse de forma independiente.
 
 La función `ft_engineering()` es invocada desde el módulo `model_training.py`, donde los datos procesados son utilizados para entrenar y evaluar los diferentes modelos de clasificación implementados en el proyecto.
+
+
+![workflow](images/data_5.png)
+
+
+
+---
+
+## `model_training.py`
+
+### Objetivo del archivo
+
+El archivo `model_training.py` entrena y compara distintos modelos de clasificación para predecir la variable `purchased`, utilizando los datos preprocesados por `ft_engineering()`.
+
+### Modelos entrenados
+
+Se entrenan y evalúan cuatro modelos de clasificación con las métricas Accuracy, Precision, Recall, F1-score y ROC-AUC, además de matriz de confusión y reporte de clasificación completo:
+
+- **Regresión Logística** (`max_iter=1000`)
+- **Regresión Logística Balanceada** (`class_weight="balanced"`, para compensar el desbalance de clases)
+- **Árbol de Decisión** (`max_depth=6`, `min_samples_split=20`, `min_samples_leaf=10`, `class_weight="balanced"`)
+- **Random Forest** (`n_estimators=200`, `class_weight="balanced"`)
+
+
+![modelos](images/data_6.png)
+
+
+
+### Búsqueda de hiperparámetros con XGBoost
+
+Se entrena adicionalmente un modelo **XGBoost** mediante `GridSearchCV`, con validación cruzada estratificada de 5 folds (`StratifiedKFold`) y optimización sobre `roc_auc`. Los hiperparámetros explorados incluyen número de estimadores, tasa de aprendizaje, profundidad máxima y regularización (`reg_alpha`, `reg_lambda`).
+
+A diferencia de los cuatro modelos anteriores, este XGBoost no se utiliza como candidato final de clasificación, sino para obtener la **importancia de variables** (`feature_importances_`) a partir de los nombres generados por el `preprocessor`. Este ranking de variables es el insumo para la etapa de clustering.
+
+
+
+> **Nota:** el registro de corridas en MLflow todavía no está implementado en este script. El guardado de los modelos entrenados (serialización a `.pkl`) se documenta más abajo, en la sección "Extracción y almacenamiento de modelos entrenados".
+
+
+
+### Ejecución directa
+
+El script se ejecuta directamente (`python model_training.py`) e imprime en consola, para cada modelo, sus métricas, matriz de confusión y reporte de clasificación, junto con el ranking de importancia de variables del XGBoost.
 
 ---
 
@@ -527,7 +611,7 @@ La idea era que los cambios se desarrollaran inicialmente en `develop`, luego fu
 Sin embargo, al intentar crear un Pull Request desde `develop` hacia `certification`, GitHub mostraba el siguiente mensaje:
 
 ```text
-There isn’t anything to compare.
+There isn't anything to compare.
 certification and develop are entirely different commit histories.
 ```
 
@@ -689,7 +773,7 @@ Como parte de la evolución del proyecto, se modificó el proceso de entrenamien
 
 ```text
 .pkl
-```   
+```
 
 El objetivo fue separar el proceso de entrenamiento del uso posterior de los modelos. De esta forma, los modelos pueden ser reutilizados por otros componentes del proyecto sin necesidad de volver a entrenarlos cada vez.
 
@@ -906,3 +990,9 @@ Documentación
 ```
 
 dentro de un mismo repositorio, utilizando una herramienta especializada para gestionar los archivos binarios de mayor tamaño.
+
+---
+
+## Próximos pasos
+
+Este README se irá actualizando a medida que se incorporen nuevos módulos al proyecto.
