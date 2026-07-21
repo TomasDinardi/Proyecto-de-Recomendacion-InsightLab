@@ -717,6 +717,54 @@ git checkout -b nueva-rama
 
 De esta manera, la nueva rama comparte automáticamente la historia de `develop` y Git puede comparar sus cambios mediante Pull Requests.
 
+Por ejemplo:
+
+```text
+main
+ │
+ └── certification
+       │
+       └── develop
+```
+
+o, según el flujo de trabajo:
+
+```text
+main
+ │
+ └── certification
+       │
+       └── feature/nueva-funcionalidad
+```
+
+La creación de ramas a partir de una base común permite que Git pueda:
+
+* Comparar los cambios entre ramas.
+* Detectar modificaciones comunes.
+* Generar Pull Requests.
+* Resolver merges de forma más predecible.
+* Mantener una trazabilidad clara del desarrollo.
+
+---
+
+### Consideración sobre el flujo del proyecto
+
+La solución aplicada permitió continuar utilizando el flujo definido:
+
+```text
+develop → certification → main
+```
+
+Sin embargo, la principal lección obtenida fue que el flujo de ramas debe establecerse desde el inicio del proyecto.
+
+Las ramas que participan en un mismo proceso de integración deben mantener una historia Git relacionada. Si se crean de forma independiente, puede ser necesario realizar una unión manual de historias mediante:
+
+```bash
+git merge --allow-unrelated-histories
+```
+
+Esta opción debe utilizarse de forma consciente, ya que puede generar conflictos cuando ambas historias contienen archivos con nombres y estructuras similares.
+
 ---
 
 ## Extracción y almacenamiento de modelos entrenados
@@ -727,9 +775,38 @@ Como parte de la evolución del proyecto, se modificó el proceso de entrenamien
 .pkl
 ```
 
-El objetivo fue separar el proceso de entrenamiento del uso posterior de los modelos. De esta forma, los modelos pueden ser reutilizados por otros componentes del proyecto (como la API o la aplicación de visualización) sin necesidad de volver a entrenarlos cada vez.
+El objetivo fue separar el proceso de entrenamiento del uso posterior de los modelos. De esta forma, los modelos pueden ser reutilizados por otros componentes del proyecto sin necesidad de volver a entrenarlos cada vez.
 
 El flujo general pasó a ser:
+
+```text
+Carga de datos
+      │
+      ▼
+Feature Engineering
+      │
+      ▼
+Entrenamiento
+      │
+      ▼
+Evaluación
+      │
+      ▼
+Guardado del modelo
+      │
+      ▼
+Archivo .pkl
+```
+
+Los modelos generados pueden ser utilizados posteriormente por componentes como la API o la aplicación de visualización.
+
+---
+
+### Refactorización del proceso de entrenamiento
+
+El proceso de entrenamiento fue reorganizado para reducir la repetición de código y permitir que cada modelo pudiera ser entrenado y almacenado de forma independiente.
+
+El flujo general quedó estructurado de la siguiente manera:
 
 ```text
 ft_engineering()
@@ -828,6 +905,30 @@ Git LFS se encarga de gestionar el almacenamiento de los archivos grandes mientr
 
 ---
 
+## Problema con el historial previo
+
+Uno de los aspectos más importantes del problema fue que los modelos ya habían sido incorporados al historial del repositorio antes de configurar correctamente Git LFS.
+
+Por este motivo, no era suficiente con configurar LFS para los archivos futuros.
+
+La configuración de Git LFS se aplica correctamente a los archivos que son gestionados por LFS, pero los archivos grandes que ya habían sido registrados previamente en el historial de Git podían continuar formando parte de los commits anteriores.
+
+La situación era conceptualmente:
+
+```text
+Commit anterior
+      │
+      └── modelo.pkl almacenado directamente por Git
+
+Configuración de Git LFS
+      │
+      └── *.pkl gestionado por LFS
+```
+
+Por lo tanto, fue necesario realizar la migración correspondiente para que los modelos existentes pasaran a ser gestionados por Git LFS.
+
+---
+
 ## Resultado final
 
 Después de configurar Git LFS y migrar los modelos existentes, los archivos `.pkl` quedaron correctamente gestionados mediante Git Large File Storage.
@@ -861,6 +962,34 @@ GitHub
 ```
 
 Esta solución permitió mantener los modelos dentro del repositorio del proyecto sin superar las limitaciones de Git para archivos grandes.
+
+---
+
+### Beneficios de la solución
+
+El uso de Git LFS permitió:
+
+* Mantener los modelos entrenados versionados junto con el código.
+* Evitar el rechazo de archivos grandes por parte de GitHub.
+* Mantener la trazabilidad de las versiones de los modelos.
+* Integrar los modelos con el flujo de trabajo existente del repositorio.
+* Evitar tener que eliminar los modelos del proyecto o gestionarlos manualmente fuera del repositorio.
+
+La decisión de utilizar Git LFS permitió mantener el enfoque actual del proyecto:
+
+```text
+Código
++
+Pipelines
++
+Workflows
++
+Modelos entrenados
++
+Documentación
+```
+
+dentro de un mismo repositorio, utilizando una herramienta especializada para gestionar los archivos binarios de mayor tamaño.
 
 ---
 
