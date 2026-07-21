@@ -11,6 +11,7 @@ cargar_datos.py
 analisis_exploratorio.ipynb
 ft_engineering.py
 model_training.py
+association_rules.py
 ```
 
 ---
@@ -418,6 +419,7 @@ También se comprueba que las principales librerías utilizadas por el proyecto 
 - FastAPI.
 - Uvicorn.
 - Streamlit.
+- mlxtend
 
 Esto permite detectar problemas relacionados con dependencias faltantes, incompatibilidades o errores en la instalación del entorno.
 
@@ -992,7 +994,92 @@ Documentación
 dentro de un mismo repositorio, utilizando una herramienta especializada para gestionar los archivos binarios de mayor tamaño.
 
 ---
+## Implementación de modelos no supervisados
+Inicialmente se realizaron pruebas aplicando diferentes modelos de clustering (KMeans, DBSCAN y Agglomerative Clustering) con el objetivo de segmentar los datos en grupos representativos.
+Sin embargo, debido a la distribución y naturaleza de las variables, los resultados obtenidos no fueron óptimos: los valores de Silhouette Score se mantuvieron bajos y los clusters mostraron fronteras difusas o poco diferenciadas.
+Esto sugiere que los datos no presentan una estructura de agrupamiento natural clara, por lo que se optó por implementar técnicas de aprendizaje no supervisado mediante reglas de asociación que permite identificar patrones y relaciones recurrentes en el comportamiento de los usuarios durante sus sesiones de navegación.
+
+---
+## Modelo de Reglas de Asociación
+Las técnicas de aprendizaje no supervisado mediante reglas de asociación se incorporan para descubrir patrones de comportamiento entre las diferentes características de las sesiones de los usuarios y su relación con la conversión. A diferencia del modelo supervisado, que estima la probabilidad de que un usuario finalice una compra, las reglas de asociación permiten identificar relaciones recurrentes y segmentos de comportamiento que no fueron definidos previamente. Estos patrones aportan contexto adicional para comprender las señales de intención de compra y detectar posibles escenarios de no conversión. La integración de ambos enfoques permite combinar la predicción individual de conversión con el análisis de patrones de comportamiento, proporcionando información útil para orientar estrategias de personalización y diseñar promociones más relevantes para cada segmento de usuario.
+
+La librería `mlxtend` (Machine Learning Extensions) proporciona herramientas adicionales para el desarrollo de modelos de aprendizaje automático y análisis de datos en Python. En este proyecto se utiliza específicamente para implementar técnicas de minería de reglas de asociación, permitiendo identificar relaciones frecuentes entre los diferentes comportamientos observados durante las sesiones de los usuarios.
+
+La implementación utiliza principalmente tres componentes de la librería:
+
+- `TransactionEncoder`: transforma las características de cada sesión en una matriz transaccional binaria, donde cada columna representa un comportamiento o categoría y cada fila corresponde a una sesión.
+- `fpgrowth`: identifica conjuntos frecuentes de características presentes en las sesiones, utilizando el algoritmo FP-Growth y un umbral mínimo de soporte (min_support).
+- `association_rules`: genera reglas de asociación a partir de los conjuntos frecuentes identificados y permite evaluarlas mediante métricas como support, confidence y lift.
+
+---
+## `association_rules.py`
+### Objetivo del archivo
+El archivo association_rules.py se encarga de identificar patrones de comportamiento entre las características de las sesiones de los usuarios mediante técnicas de aprendizaje no supervisado y reglas de asociación. Su objetivo es descubrir combinaciones de características que presenten una relación recurrente con la finalización o no finalización de una compra.
+
+Las reglas obtenidas permiten complementar las predicciones del modelo supervisado, aportando información sobre los patrones de comportamiento de los usuarios que pueden ser utilizados posteriormente para segmentar usuarios y orientar estrategias de personalización de promociones.
+
+---
+### Funcionamiento General
+El script realiza un proceso de transformación de los datos originales para construir una matriz transaccional. Para ello, las variables categóricas codificadas numéricamente son transformadas a etiquetas descriptivas y se generan segmentos de comportamiento relacionados con variables como el nivel de navegación y el porcentaje de descuento.
+
+Posteriormente, mediante TransactionEncoder, las características de cada sesión son transformadas en una representación binaria que permite identificar la presencia o ausencia de cada comportamiento dentro de una transacción.
+
+Sobre esta matriz transaccional se aplica el algoritmo FP-Growth para identificar patrones o conjuntos frecuentes de características. A partir de estos conjuntos se generan reglas de asociación utilizando métricas como support, confidence y lift, con el propósito de evaluar la frecuencia, confiabilidad y relevancia de las relaciones encontradas.
+
+
+Finalmente, las reglas son analizadas y filtradas para identificar aquellas relacionadas con patrones de compra y no compra, priorizando las reglas con mayor potencial para aportar información útil en la segmentación y personalización de estrategias comerciales.
+
+---
+### Flujo General de trabajo
+```text
+Datos originales
+       ↓
+Selección de variables
+       ↓
+Transformación de variables categóricas
+       ↓
+Creación de segmentos de comportamiento
+       ↓
+Construcción de matriz transaccional
+       ↓
+Identificación de conjuntos frecuentes
+       ↓
+Generación de reglas de asociación
+       ↓
+Evaluación mediante Support, Confidence y Lift
+       ↓
+Filtrado y selección de reglas relevantes
+       ↓
+Patrones de comportamiento para personalización
+```
+---
+### Interpretación de métricas de las reglas de asociación
+
+| Métrica | ¿Qué mide? | Interpretación | Uso en el proyecto |
+|---|---|---|---|
+| **Support (Soporte)** | Frecuencia con la que una regla aparece en el total de las sesiones. | Un support de `0.14` indica que el 14 % de las sesiones contiene simultáneamente los elementos de la regla. | Permite identificar reglas con suficiente cobertura y evitar patrones demasiado poco frecuentes. |
+| **Confidence (Confianza)** | Probabilidad de que ocurra el consecuente cuando se cumplen las condiciones del antecedente. | Una confidence de `0.78` indica que, en el 78 % de las sesiones que cumplen el antecedente, también se presenta el consecuente. | Permite evaluar la confiabilidad de la relación encontrada y priorizar reglas con mayor capacidad descriptiva. |
+| **Lift (Elevación)** | Mide cuánto aumenta la probabilidad del consecuente cuando se presenta el antecedente, comparándola con su frecuencia general. | `Lift > 1`: asociación positiva. `Lift ≈ 1`: no existe una asociación relevante. `Lift < 1`: asociación negativa. | Es especialmente importante para identificar relaciones que realmente diferencian un comportamiento de la tendencia general y evitar seleccionar reglas con alta confidence pero poca capacidad de diferenciación. |
+
+---
+### Selección de Reglas útiles
+En este proyecto, las métricas se analizan de manera conjunta. Una regla de asociación potencialmente útil debe presentar un **support suficiente para garantizar una cobertura relevante**, una **confidence adecuada para representar una relación consistente** y, especialmente, un **lift superior a 1** que indique una asociación positiva entre el antecedente y el consecuente.
+
+> **Nota:** Las métricas de las reglas de asociación permiten identificar relaciones y patrones en los datos, pero no implican causalidad. Por ejemplo, una regla con un lift elevado no demuestra que una determinada característica provoque una compra; únicamente indica que ambas condiciones aparecen asociadas con mayor frecuencia de la esperada.
+
+### Reglas de asociación seleccionadas
+
+| Regla | Support | Confidence | Lift | Interpretación | Aplicación en el negocio |
+|---|---:|---:|---:|---|---|
+| `cart_added + returning_user → purchase_yes` | 14.14 % | 39.88 % | 1.78 | Los usuarios recurrentes que agregan productos al carrito presentan una mayor asociación con la compra respecto al comportamiento promedio. | Identificar usuarios con alta intención de compra. Priorizar recordatorios de carrito o incentivos de bajo costo para evitar reducir innecesariamente el margen. |
+| `cart_added + high_navigation + returning_user → purchase_yes` | 10.06 % | 39.76 % | 1.77 | Los usuarios recurrentes que agregan productos al carrito y presentan alta navegación muestran una asociación positiva con la conversión. | Identificar usuarios con alta interacción e intención de compra. Utilizar recordatorios personalizados o beneficios de bajo costo. |
+| `cart_added + high_navigation → purchase_yes` | 16.07 % | 35.03 % | 1.56 | Las sesiones con productos agregados al carrito y alta navegación presentan una asociación positiva con la compra. | Identificar usuarios con señales de intención de compra y orientar acciones de recuperación o personalización. |
+| `cart_added + high_navigation + new_user → purchase_yes` | 6.02 % | 29.21 % | 1.30 | Los usuarios nuevos que agregan productos al carrito y presentan alta navegación muestran una asociación positiva con la conversión. | Identificar usuarios con alta interacción e intención de compra. Utilizar recordatorios personalizados o beneficios de bajo costo, incentivo a usuario nuevo. |
+| `cart_added + new_user → purchase_yes` | 8.08 % | 28.69 % | 1.28 | Los usuarios nuevos que agregan productos al carrito presentan una mayor asociación con la compra respecto al comportamiento promedio. | Identificar usuarios con alta intención de compra. Priorizar recordatorios de carrito o incentivos de bajo costo  para evitar reducir innecesariamente el margen. |
+---
+### Salida del archivo `association_rules.py`
+
+El proceso genera un conjunto de reglas de asociación que permiten identificar patrones de comportamiento relacionados con la conversión y la no conversión. Estas reglas, son importadas por el archivo recommendation_engine.py que se utilizarán como una fuente adicional de información para el sistema de recomendación, complementando la probabilidad de compra generada por el modelo supervisado y contribuyendo a la definición de acciones y promociones personalizadas.
 
 ## Próximos pasos
-
 Este README se irá actualizando a medida que se incorporen nuevos módulos al proyecto.
