@@ -116,12 +116,21 @@ def ft_engineering():
 
 
 
-# 🚀 Guardar  preprocessor en src/models
-if __name__ == "__main__":
-    
+# ----------------------------------------------------------------------
+# Guardar preprocessor en src/models
+# ----------------------------------------------------------------------
+# NOTA: la generacion del preprocessor se movio a una funcion (guardar_preprocessor)
+# en vez de ejecutarse directo en __main__. Esto es necesario para que el preprocessor.pkl 
+# pueda cargarse desde otros modulos (como api.py) sin el error
+# "Can't get attribute 'log_func'". Al importar ft_engineering, las funciones
+# log_func y to_str_func quedan referenciadas al modulo y no a __main__.
+def guardar_preprocessor():
     X_train, X_test, y_train, y_test, preprocessor = ft_engineering()
     models_dir = os.path.join(os.path.dirname(__file__), "models")
     os.makedirs(models_dir, exist_ok=True)
-    joblib.dump(preprocessor,os.path.join(models_dir, "preprocessor.pkl"))
-    
+    joblib.dump(preprocessor, os.path.join(models_dir, "preprocessor.pkl"))
+    print("preprocessor.pkl generado correctamente en models/")
+
+if __name__ == "__main__":
+    guardar_preprocessor()
     
