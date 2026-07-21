@@ -5,6 +5,15 @@ from mlxtend.preprocessing import TransactionEncoder
 from mlxtend.frequent_patterns import fpgrowth, association_rules
 from cargar_datos import cargar_datos
 
+BASE_DIR = os.path.dirname(
+    os.path.abspath(__file__)
+)
+
+MODEL_DIR = os.path.join(
+    BASE_DIR,
+    "models"
+)
+
 # 1. CONFIGURACIONES DE PREPROCESAMIENTO
 
 
@@ -570,7 +579,7 @@ def main():
     # Crear carpeta de models si no existe
 
     os.makedirs(
-        "models",
+        MODEL_DIR,
         exist_ok=True
     )
     # Cargar dataset original
@@ -580,7 +589,7 @@ def main():
     # Exportar  preprocesamiento en la carpeta models
 
     preprocessing_path = os.path.join(
-        "models",
+        MODEL_DIR,
         "rules_preprocessing.pkl"
     )
 
@@ -719,7 +728,7 @@ def main():
     # Exportar reglas seleccionadas en formato pkl en la carpeta models.
 
     rules_path = os.path.join(
-        "models",
+        MODEL_DIR,
         "selected_association_rules.pkl"
     )
 
