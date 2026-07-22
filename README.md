@@ -1723,5 +1723,131 @@ El archivo ofrece la capa de presentación del proyecto: una aplicación visual 
 
 ---
 
-## Próximos pasos
-Este README se irá actualizando a medida que se incorporen nuevos módulos al proyecto.
+# Cómo construir la imagen Docker — MLOps-InsightLab
+
+Esta guía explica paso a paso cómo generar la imagen Docker de la API del proyecto.
+
+## Estructura relevante
+
+```
+MLOps-InsightLab/
+├── Dockerfile
+├── .dockerignore
+├── requirements.txt
+├── Ecommerce.csv
+└── src/
+    ├── api.py
+    ├── streamlit_app.py
+    ├── models/
+    │   └── *.pkl
+    └── ...
+```
+
+`requirements.txt` y `Ecommerce.csv` viven en la raíz de `MLOps-InsightLab/`, junto al `Dockerfile`. El código fuente está en `src/`.
+
+## 1. Requisitos previos
+
+- Docker Desktop instalado y corriendo.
+- Estar parado en la carpeta correcta antes de construir la imagen (ver paso 2).
+
+## 2. Ubicarte en el directorio correcto
+
+El **contexto de build** (el `.` al final del comando `docker build`) determina qué carpeta puede "ver" el Dockerfile. Como el `Dockerfile` vive dentro de `MLOps-InsightLab/`, tenés que pararte ahí:
+
+```powershell
+cd MLOps-InsightLab
+```
+
+> Error típico: si corrés `docker build` desde la raíz del repo (un nivel arriba) o desde `src/`, vas a tener errores de `COPY ... not found`, porque las rutas del Dockerfile no van a coincidir con el contexto.
+
+## 3. Qué debe hacer el Dockerfile
+
+El `Dockerfile` (ubicado en `MLOps-InsightLab/Dockerfile`) debe encargarse de:
+
+1. Partir de una imagen base liviana de Python (por ejemplo `python:3.11-slim`).
+2. Definir variables de entorno para evitar archivos `.pyc` y buffering de logs.
+3. Establecer un directorio de trabajo dentro del contenedor (por ejemplo `/app`).
+4. Copiar `requirements.txt` (que está en la raíz de `MLOps-InsightLab/`) e instalar las dependencias con `pip`.
+5. Copiar el contenido de `src/` al directorio de trabajo — esto incluye automáticamente los `.pkl` de `src/models/`.
+6. Copiar `Ecommerce.csv` si el código lo necesita en runtime.
+7. Exponer el puerto en el que corre la API (por ejemplo `8000`).
+8. Definir el comando de arranque (`CMD`) que levante la app FastAPI con `uvicorn`, apuntando al objeto `app` definido en `api.py`, escuchando en `0.0.0.0` en el puerto expuesto (`8000`).
+
+### Notas importantes para este `api.py` en particular
+
+- `api.py` usa **FastAPI + uvicorn**, así que el comando de arranque debe ejecutar uvicorn contra el objeto `app` de ese archivo (no `python api.py`).
+- Si copiás el **contenido** de `src/` directo al directorio de trabajo (en vez de crear una subcarpeta `src/` dentro del contenedor), `api.py` queda accesible directamente en `/app/api.py`, sin prefijo de módulo. Esto es importante porque `api.py` hace imports locales (`from ft_engineering import ...` y `from recommendation_engine import RecommendationEngine`) que solo funcionan si esos archivos quedan al mismo nivel que `api.py` dentro del contenedor.
+- `api.py` calcula sus rutas a los `.pkl` de forma dinámica con `os.path.dirname(os.path.abspath(__file__))` y una subcarpeta `models/`. Esto significa que **no hace falta ajustar rutas a mano**: mientras `models/` viaje junto con `api.py` dentro de `src/`, las rutas se resuelven solas dentro del contenedor.
+- El archivo carga por defecto `logistic_regression_balanced.pkl` como modelo activo. Si en algún momento cambiás cuál `.pkl` usa el código, no hace falta tocar el Dockerfile — todos los `.pkl` de `models/` ya se copian igual.
+- Si `preprocessor.pkl`, el modelo o los archivos de reglas de asociación (`selected_association_rules.pkl`, `rules_preprocessing.pkl`) faltan en el contenedor, la API igual levanta pero responde con advertencias en consola y un `503` en `/predict` o `/recommend`. Es una buena forma de detectar si el `COPY` de `models/` falló.
+
+## 4. Qué debe excluir el `.dockerignore`
+
+El `.dockerignore` (también en `MLOps-InsightLab/`) debe evitar que se copien al contexto de build archivos que no aportan al runtime, como:
+
+- Carpetas de control de versiones (`.git`, `.gitignore`, `.gitattributes`).
+- Archivos generados por Python (`__pycache__/`, `*.pyc`, entornos virtuales).
+- Checkpoints y notebooks de exploración (`.ipynb_checkpoints/`, el notebook de análisis exploratorio).
+- Documentación y assets que no usa el código (`README.md`, `LICENSE`, carpeta de imágenes).
+- Archivos propios de Docker (`Dockerfile*`, `docker-compose.yml`, `.dockerignore`).
+- Configuración local o sensible (`.env`, carpetas de editor como `.vscode/` o `.idea/`).
+- Archivos de sistema operativo (`.DS_Store`, `Thumbs.db`).
+
+Esto mantiene la imagen más liviana y evita filtrar información sensible o innecesaria.
+
+## 5. Construir la imagen
+
+Parado en `MLOps-InsightLab/`:
+
+```powershell
+docker build -t insightlab-api -f Dockerfile .
+```
+
+- `-t insightlab-api`: nombre (tag) que le das a la imagen.
+- `-f Dockerfile`: indica qué archivo usar como definición de build.
+- `.`: contexto de build (carpeta actual).
+
+## 6. Correr el contenedor
+
+```powershell
+docker run -p 8000:8000 insightlab-api
+```
+
+Esto expone el puerto `8000` del contenedor en el puerto `8000` de tu máquina. La API debería quedar accesible en `http://localhost:8000`.
+
+## 7. Verificar que todo funcione
+
+```powershell
+docker ps
+```
+
+Deberías ver el contenedor corriendo. Esta API expone tres endpoints principales:
+
+- **`GET /`** — chequeo rápido de que la API está viva; devuelve si el preprocesador, el modelo y el motor de recomendación cargaron correctamente. Es el primer lugar para mirar si algo salió mal con los `.pkl`.
+- **`POST /predict`** — recibe los datos de una sesión de usuario y devuelve la predicción de compra.
+- **`POST /recommend`** — recibe los mismos datos y devuelve predicción + intención + recomendación de acción.
+
+Probá primero el endpoint raíz desde el navegador o con `curl`:
+
+```powershell
+curl http://localhost:8000/
+```
+
+Si devuelve `"preprocesador_cargado": true`, `"modelo_cargado": true` y `"motor_recomendacion_cargado": true`, la imagen quedó bien armada. Si alguno da `false`, revisá que la carpeta `models/` se haya copiado completa dentro del contenedor.
+
+FastAPI también expone documentación interactiva en `/docs`, útil para probar `/predict` y `/recommend` sin escribir `curl` a mano:
+
+```
+http://localhost:8000/docs
+```
+
+## Errores comunes y soluciones
+
+| Error | Causa | Solución |
+|---|---|---|
+| `open Dockerfile: no such file or directory` | Estás parado en la carpeta equivocada | Verificá con `pwd` (o `Get-Location` en PowerShell) que estés en `MLOps-InsightLab/` |
+| `COPY ... not found` / `failed to calculate checksum` | El contexto de build no coincide con las rutas del `COPY` | Revisá que las rutas del Dockerfile sean relativas al contexto real (`.`) |
+| `FileNotFoundError` al levantar la API | El código busca un archivo (ej. `Ecommerce.csv` o un `.pkl`) en una ruta que no existe dentro del contenedor | Confirmá que el `COPY` incluya ese archivo y que la ruta que usa el código coincida con dónde quedó copiado dentro de `/app` |
+| La imagen pesa mucho | Se están copiando archivos innecesarios (notebooks, `.git`, imágenes) | Revisá y ampliá el `.dockerignore` |
+
+---
