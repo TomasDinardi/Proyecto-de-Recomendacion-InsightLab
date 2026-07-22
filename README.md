@@ -1081,5 +1081,606 @@ En este proyecto, las métricas se analizan de manera conjunta. Una regla de aso
 
 El proceso genera un conjunto de reglas de asociación que permiten identificar patrones de comportamiento relacionados con la conversión y la no conversión. Estas reglas, son importadas por el archivo recommendation_engine.py que se utilizarán como una fuente adicional de información para el sistema de recomendación, complementando la probabilidad de compra generada por el modelo supervisado y contribuyendo a la definición de acciones y promociones personalizadas.
 
+---
+
+## `recommendation_engine.py`
+
+### Objetivo del archivo
+
+El archivo `recommendation_engine.py` implementa el motor de recomendación del proyecto. Su función es integrar dos fuentes de información complementarias:
+
+* La probabilidad de compra estimada por un modelo supervisado.
+* Los patrones de comportamiento identificados mediante reglas de asociación.
+
+De esta forma, el sistema no se limita únicamente a predecir si una sesión tiene probabilidad de terminar en compra, sino que también analiza si el comportamiento actual del usuario coincide con patrones previamente identificados en el dataset.
+
+La integración de ambos enfoques permite construir una estrategia de recomendación basada en:
+
+```text
+Predicción individual del modelo
++
+Patrones históricos de comportamiento
+        ↓
+Estrategia de recomendación
+```
+
+El motor utiliza los mismos preprocesadores empleados durante las etapas de entrenamiento para garantizar que los datos recibidos durante la inferencia sean transformados de la misma manera que los datos utilizados para entrenar los modelos.
+
+---
+
+### Componentes utilizados
+
+El motor consume los siguientes artefactos previamente generados:
+
+```text
+models/
+├── decision_tree.pkl
+├── preprocessor.pkl
+├── selected_association_rules.pkl
+└── rules_preprocessing.pkl
+```
+
+### `decision_tree.pkl`
+
+Contiene el modelo supervisado entrenado para estimar la probabilidad de que una sesión finalice en compra.
+
+El modelo recibe las variables de una nueva sesión y devuelve:
+
+```text
+Predicción binaria
+Probabilidad estimada de compra
+```
+
+La probabilidad generada por el modelo constituye una de las principales entradas para determinar la intención de compra del usuario.
+
+### `preprocessor.pkl`
+
+Contiene el preprocesador utilizado durante el entrenamiento del modelo supervisado.
+
+Su función es transformar los datos originales de una nueva sesión utilizando exactamente la misma lógica aplicada durante el entrenamiento, incluyendo las transformaciones numéricas y categóricas correspondientes.
+
+Esto permite evitar inconsistencias entre:
+
+```text
+Datos utilizados durante el entrenamiento
+```
+
+y:
+
+```text
+Datos recibidos durante la inferencia
+```
+
+### `selected_association_rules.pkl`
+
+Contiene las reglas de asociación seleccionadas previamente mediante el proceso implementado en `association_rules.py`.
+
+Las reglas se almacenan en un formato preparado para ser utilizado durante la inferencia:
+
+```python
+{
+    "antecedents": {...},
+    "consequents": {...},
+    "outcome": "purchase_yes",
+    "support": ...,
+    "confidence": ...,
+    "lift": ...
+}
+```
+
+El motor utiliza los antecedentes de estas reglas para determinar si el comportamiento de una nueva sesión coincide con patrones históricos relacionados con compra o no compra.
+
+### `rules_preprocessing.pkl`
+
+Contiene la configuración utilizada para transformar las variables destinadas al análisis de reglas de asociación.
+
+Esta configuración incluye:
+
+```text
+Mapeos de variables categóricas
+Segmentos de descuento
+Segmentos de navegación
+Etiquetas de comportamiento
+```
+
+El uso de este archivo permite que una nueva sesión sea transformada utilizando la misma lógica aplicada durante la generación de las reglas.
+
+---
+
+## Clase `RecommendationEngine`
+
+La clase `RecommendationEngine` centraliza toda la lógica de inferencia del sistema de recomendación.
+
+Durante su inicialización carga:
+
+```text
+Modelo supervisado
+Reglas de asociación
+Preprocesamiento de reglas
+Preprocesador del modelo supervisado
+```
+
+De esta forma, una única instancia del motor puede reutilizar todos los artefactos necesarios para procesar nuevas sesiones.
+
+---
+
+### `predict_purchase()`
+
+Esta función recibe los datos originales de una sesión y estima su probabilidad de compra.
+
+El proceso es:
+
+```text
+Datos originales de la sesión
+        ↓
+Creación de DataFrame
+        ↓
+Aplicación de preprocessor.pkl
+        ↓
+Transformación de variables
+        ↓
+Modelo supervisado
+        ↓
+Predicción + probabilidad
+```
+
+La función retorna:
+
+```python
+{
+    "prediction": 1,
+    "probability": 0.71
+}
+```
+
+La probabilidad se redondea a dos decimales para facilitar su interpretación y presentación:
+
+```text
+0.71
+```
+
+La salida contiene:
+
+* **`prediction`**: predicción binaria del modelo.
+* **`probability`**: probabilidad estimada de compra.
+
+---
+
+### `process_session_for_rules()`
+
+Esta función prepara los datos de la sesión para compararlos con las reglas de asociación.
+
+A diferencia del modelo supervisado, las reglas trabajan con etiquetas descriptivas de comportamiento.
+
+Por ejemplo, una sesión puede transformarse en:
+
+```text
+cart_added
+returning_user
+device_mobile
+high_navigation
+category_mobiles_electronics
+payment_credit_card
+```
+
+El proceso utiliza la configuración almacenada en:
+
+```text
+rules_preprocessing.pkl
+```
+
+Esto garantiza que las categorías y segmentos utilizados durante la inferencia sean consistentes con los utilizados durante la generación de las reglas.
+
+---
+
+### `create_session_items()`
+
+Esta función convierte la sesión preprocesada en un conjunto de elementos (`set`).
+
+Por ejemplo:
+
+```python
+{
+    "cart_added",
+    "returning_user",
+    "high_navigation",
+    "device_mobile",
+    "category_mobiles_electronics"
+}
+```
+
+Cada elemento representa una característica observable del comportamiento de la sesión.
+
+Estos elementos son posteriormente comparados con los antecedentes de las reglas de asociación.
+
+---
+
+## Identificación de reglas coincidentes
+
+### `find_matching_rules()`
+
+La función busca las reglas cuyos antecedentes estén completamente contenidos dentro de los elementos de la sesión.
+
+Por ejemplo, si una regla tiene como antecedente:
+
+```text
+{
+    cart_added,
+    returning_user
+}
+```
+
+y la sesión contiene:
+
+```text
+{
+    cart_added,
+    returning_user,
+    high_navigation,
+    device_mobile
+}
+```
+
+la regla se considera coincidente porque todos sus antecedentes están presentes.
+
+Conceptualmente:
+
+```text
+Antecedente de la regla
+        ⊆
+Elementos de la sesión
+```
+
+Las reglas coincidentes se dividen posteriormente en:
+
+```text
+Reglas asociadas a compra
+        ↓
+purchase_yes
+
+Reglas asociadas a no compra
+        ↓
+purchase_no
+```
+
+---
+
+## Clasificación de la intención de compra
+
+### `classify_purchase_intention()`
+
+La probabilidad estimada por el modelo supervisado se transforma en un nivel de intención de compra.
+
+Los umbrales utilizados son:
+
+| Probabilidad | Intención |
+| ------------ | --------- |
+| `>= 0.70`    | `high`    |
+| `>= 0.40`    | `medium`  |
+| `< 0.40`     | `low`     |
+
+Por ejemplo:
+
+```text
+Probabilidad: 0.71
+        ↓
+Intención: high
+```
+
+Esta clasificación permite interpretar la probabilidad numérica desde una perspectiva de negocio.
+
+---
+
+## Generación de la recomendación
+
+### `generate_recommendation()`
+
+Esta función coordina todo el flujo del motor de recomendación.
+
+El proceso completo es:
+
+```text
+Nueva sesión
+        ↓
+Predicción del modelo supervisado
+        ↓
+Probabilidad de compra
+        ↓
+Clasificación de intención
+        ↓
+Preprocesamiento para reglas
+        ↓
+Creación de elementos de sesión
+        ↓
+Búsqueda de reglas coincidentes
+        ↓
+Separación entre compra y no compra
+        ↓
+Determinación de estrategia
+        ↓
+Resultado final
+```
+
+El motor combina la predicción del modelo supervisado con las reglas de asociación para determinar la estrategia final.
+
+---
+
+## Estrategias de recomendación
+
+El sistema contempla las siguientes estrategias:
+
+### `high_conversion_intent`
+
+Se selecciona cuando:
+
+```text
+Modelo predice compra
++
+Existe al menos una regla asociada a compra
+```
+
+Esta es la estrategia que representa la mayor coincidencia entre ambos enfoques.
+
+Conceptualmente:
+
+```text
+Modelo supervisado
+        ↓
+Predice compra
+
+Reglas de asociación
+        ↓
+También identifican un patrón asociado a compra
+
+        ↓
+
+high_conversion_intent
+```
+
+Por ejemplo:
+
+```text
+Probabilidad de compra: 0.71
+Predicción: 1
+Reglas de compra coincidentes: 3
+```
+
+Resultado:
+
+```text
+high_conversion_intent
+```
+
+---
+
+### `model_predicted_purchase`
+
+Se selecciona cuando el modelo supervisado predice una compra, pero no se encuentra ninguna regla de asociación coincidente relacionada con la compra.
+
+```text
+Modelo predice compra
++
+No hay reglas coincidentes de compra
+```
+
+Esto indica que el modelo identifica una probabilidad positiva de conversión, aunque el comportamiento específico de la sesión no coincida con los patrones seleccionados por las reglas de asociación.
+
+---
+
+### `association_predicted_purchase`
+
+Se selecciona cuando existe una regla asociada a compra, aunque el modelo supervisado no haya realizado una predicción positiva.
+
+```text
+Modelo no predice compra
++
+Existe una regla asociada a compra
+```
+
+En este escenario, las reglas aportan una señal adicional que puede ser considerada por la estrategia de personalización.
+
+---
+
+### `low_conversion_intent`
+
+Se selecciona cuando la sesión coincide con una o más reglas asociadas a `purchase_no`.
+
+```text
+No existen reglas de compra coincidentes
++
+Existe una regla de no compra
+```
+
+Este resultado permite identificar comportamientos históricamente asociados con una menor probabilidad de conversión.
+
+---
+
+### `insufficient_evidence`
+
+Se selecciona cuando:
+
+```text
+El modelo no predice compra
++
+No existen reglas de compra coincidentes
++
+No existen reglas de no compra coincidentes
+```
+
+En este caso, el sistema no cuenta con suficiente evidencia para clasificar el comportamiento de la sesión dentro de una estrategia específica.
+
+---
+
+## Resultado generado
+
+El motor devuelve un diccionario con la información completa de la recomendación:
+
+```python
+{
+    "purchase_probability": 0.71,
+    "purchase_prediction": 1,
+    "purchase_intention": "high",
+    "strategy": "high_conversion_intent",
+    "matched_purchase_rules": [...],
+    "matched_no_purchase_rules": [...],
+    "session_items": {...}
+}
+```
+
+La salida contiene:
+
+| Campo                       | Descripción                                                |
+| --------------------------- | ---------------------------------------------------------- |
+| `purchase_probability`      | Probabilidad estimada de compra por el modelo supervisado. |
+| `purchase_prediction`       | Predicción binaria del modelo.                             |
+| `purchase_intention`        | Nivel de intención: `high`, `medium` o `low`.              |
+| `strategy`                  | Estrategia final determinada por el motor.                 |
+| `matched_purchase_rules`    | Reglas asociadas a compra que coinciden con la sesión.     |
+| `matched_no_purchase_rules` | Reglas asociadas a no compra que coinciden con la sesión.  |
+| `session_items`             | Conjunto de características observables de la sesión.      |
+
+---
+
+## Ejemplo de ejecución
+
+Para una sesión con características como:
+
+```text
+Usuario recurrente
+Producto agregado al carrito
+Alta navegación
+Dispositivo móvil
+Descuento medio
+```
+
+el motor puede generar:
+
+```text
+Probabilidad de compra:
+0.71
+
+Predicción:
+1
+
+Intención:
+high
+
+Estrategia:
+high_conversion_intent
+```
+
+Además, puede identificar reglas como:
+
+```text
+cart_added + returning_user → purchase_yes
+```
+
+y:
+
+```text
+cart_added + high_navigation → purchase_yes
+```
+
+Esto permite combinar la probabilidad individual estimada por el modelo con patrones históricos de comportamiento identificados mediante reglas de asociación.
+
+---
+
+## Arquitectura de integración
+
+La integración entre los componentes queda estructurada de la siguiente manera:
+
+```text
+Nueva sesión de usuario
+        │
+        ├──────────────────────────┐
+        │                          │
+        ▼                          ▼
+Modelo supervisado          Preprocesamiento
+        │                    para reglas
+        ▼                          │
+Probabilidad de compra             ▼
+        │                    Elementos de sesión
+        │                          │
+        │                          ▼
+        │                    Reglas coincidentes
+        │                          │
+        └──────────────┬───────────┘
+                       ▼
+             Motor de recomendación
+                       │
+                       ▼
+             Estrategia de negocio
+```
+
+Este diseño permite separar claramente:
+
+```text
+Predicción
+        +
+Análisis de patrones
+        ↓
+Decisión de recomendación
+```
+
+---
+
+## Rol dentro del proyecto
+
+El archivo `recommendation_engine.py` representa la capa de integración entre los modelos desarrollados y la lógica de negocio.
+
+Mientras que:
+
+```text
+model_training.py
+```
+
+se encarga de entrenar y guardar los modelos supervisados,
+
+y:
+
+```text
+association_rules.py
+```
+
+se encarga de descubrir y seleccionar patrones de comportamiento,
+
+el motor de recomendación:
+
+```text
+recommendation_engine.py
+```
+
+utiliza los artefactos generados por ambos procesos para analizar nuevas sesiones.
+
+El flujo completo queda:
+
+```text
+Dataset
+    ↓
+Feature Engineering
+    ↓
+Entrenamiento del modelo supervisado
+    ↓
+decision_tree.pkl
+    │
+    ├──────────────────────┐
+    │                      │
+    ▼                      ▼
+Preprocessor         Reglas de asociación
+    │                      │
+    ▼                      ▼
+Nueva sesión ────────→ RecommendationEngine
+                           │
+                           ▼
+                 Predicción + patrones
+                           │
+                           ▼
+                  Estrategia recomendada
+```
+
+De esta manera, el proyecto evoluciona desde un modelo de predicción aislado hacia un sistema de recomendación que combina aprendizaje supervisado, aprendizaje no supervisado mediante reglas de asociación y lógica de negocio.
+
+---
+
 ## Próximos pasos
 Este README se irá actualizando a medida que se incorporen nuevos módulos al proyecto.
