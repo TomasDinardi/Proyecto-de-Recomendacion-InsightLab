@@ -1680,6 +1680,93 @@ Nueva sesión ────────→ RecommendationEngine
 
 De esta manera, el proyecto evoluciona desde un modelo de predicción aislado hacia un sistema de recomendación que combina aprendizaje supervisado, aprendizaje no supervisado mediante reglas de asociación y lógica de negocio.
 
+
+
+## `api.py`
+
+### Objetivo del archivo
+El archivo `api.py` expone el sistema de predicción y recomendación del proyecto a través de una API construida con FastAPI. Su objetivo es poner los modelos entrenados a disposición de un usuario o aplicación externa, permitiendo enviar los datos de una sesión de e-commerce y obtener como respuesta tanto la probabilidad de compra como una recomendación accionable.
+
+De esta manera, la API funciona como la capa de entrega del proyecto: traduce los artefactos generados durante el entrenamiento (preprocessor y modelo) y la lógica del motor de recomendación en un servicio consultable de forma estandarizada.
+
+---
+### Funcionamiento General
+La API carga al iniciarse el preprocesador (`preprocessor.pkl`) y el modelo supervisado definido como modelo final del proyecto. Adicionalmente, instancia el motor de recomendación (`RecommendationEngine`) reutilizando ese mismo modelo y preprocesador, junto con las reglas de asociación seleccionadas. Si alguno de estos artefactos no se encuentra disponible, la API igualmente se inicia y lo informa, evitando interrumpir el resto del servicio.
+
+Los datos de entrada se validan mediante un esquema de Pydantic (`SesionUsuario`), que define las 18 variables esperadas de la sesión y sus tipos. Antes de la predicción, la API deriva internamente la variable `tiempo_por_pagina` y ordena las columnas en el mismo formato utilizado durante el entrenamiento, garantizando coherencia con el preprocesador.
+
+La API expone tres endpoints:
+
+- **`GET /`**: endpoint de verificación que informa si el preprocesador, el modelo y el motor de recomendación se cargaron correctamente.
+- **`POST /predict`**: recibe los datos de una sesión y devuelve la predicción de compra y su probabilidad. Corresponde al resultado "crudo" del modelo supervisado.
+- **`POST /recommend`**: recibe los mismos datos y devuelve una recomendación completa, que combina la probabilidad de compra, la intención estimada, las reglas de asociación coincidentes y la acción sugerida. Reutiliza el motor de recomendación sin modificar su código.
+
+Ambos endpoints de predicción utilizan el mismo modelo y preprocesador, de modo que el resultado sea coherente entre la predicción directa y la recomendación.
+
+---
+### Flujo General de trabajo
+```text
+Datos de la sesión (JSON)
+       ↓
+Validación con Pydantic (SesionUsuario)
+       ↓
+Derivación de variables + ordenamiento de columnas
+       ↓
+Preprocesamiento (preprocessor.pkl)
+       ↓
+   ┌──────────────┴──────────────┐
+   ▼                             ▼
+/predict                     /recommend
+Modelo supervisado           RecommendationEngine
+   │                             │
+   ▼                             ▼
+Predicción +                 Predicción + reglas +
+probabilidad                 intención + acción sugerida
+```
+---
+### Modelo utilizado
+La API está configurada para utilizar por defecto el modelo de regresión logística balanceada (`logistic_regression_balanced.pkl`), seleccionado por priorizar la métrica de Recall. El modelo puede cambiarse modificando una única línea de configuración, y el modelo elegido se aplica de forma coherente tanto en `/predict` como en `/recommend`.
+
+---
+### Salida del archivo `api.py`
+El archivo pone en funcionamiento un servicio web que permite consultar el sistema de predicción y recomendación de forma estandarizada. Es consumido por la demo desarrollada en `streamlit_app.py`, que utiliza sus endpoints para ofrecer una interfaz visual al usuario final.
+
+---
+## `streamlit_app.py`
+### Objetivo del archivo
+El archivo `streamlit_app.py` implementa una interfaz visual interactiva que permite utilizar el sistema de predicción y recomendación sin necesidad de conocimientos técnicos. Su objetivo es ofrecer una demostración accesible del proyecto, en la que el usuario carga los datos de una sesión mediante formularios y obtiene los resultados de forma clara y visual.
+
+La aplicación no ejecuta los modelos directamente, sino que consume la API desarrollada en `api.py`, manteniendo separada la interfaz de la lógica de predicción.
+
+---
+### Funcionamiento General
+La interfaz presenta un formulario con las variables de la sesión, organizadas en secciones (perfil del usuario, origen y producto, precio y navegación, y datos temporales). Para facilitar su uso, varios campos incluyen la opción "Indistinto", que envía internamente el valor más frecuente de esa variable en el dataset, evitando que el usuario deba definir manualmente cada dato.
+
+Al presionar el botón de predicción, la aplicación arma los datos de la sesión, los envía a la API y muestra en primer lugar la probabilidad de compra, seguida de la predicción interpretada como una estimación ("probablemente compraría" o "probablemente no compraría"). Una vez obtenida la predicción, se habilita un segundo botón que permite visualizar la recomendación completa: la acción sugerida, la intención de compra y los detalles de la promoción propuesta.
+
+Dado que Streamlit vuelve a ejecutar el script completo ante cada interacción, la aplicación utiliza `st.session_state` para conservar el resultado de la predicción entre acciones, permitiendo que la recomendación se muestre sin perder la información previa.
+
+---
+### Flujo General de trabajo
+```text
+Formulario de datos de la sesión
+       ↓
+Traducción de opciones a valores numéricos
+       ↓
+Envío de la sesión a la API (endpoint /recommend)
+       ↓
+Muestra de la probabilidad de compra
+       ↓
+Muestra de la predicción interpretada
+       ↓
+Botón "Ver recomendación"
+       ↓
+Muestra de la acción y promoción sugeridas
+```
+---
+### Salida del archivo `streamlit_app.py`
+El archivo ofrece la capa de presentación del proyecto: una aplicación visual que consume la API y traduce sus respuestas en una experiencia comprensible para el usuario final, integrando en una misma pantalla la predicción de compra y la recomendación asociada.
+
 ---
 
 ## Próximos pasos
