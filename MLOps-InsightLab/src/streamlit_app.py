@@ -1,8 +1,9 @@
 # ======================================================================================
 # STREAMLIT DEMO - PROYECTO INSIGHTLAB
 # ======================================================================================
-# Interfaz visual que consume la API de prediccion (FastAPI) para predecir si una
-# sesion de usuario terminara en compra (purchased).
+# Interfaz visual que consume la API (FastAPI) para:
+#   1) Predecir si una sesion terminara en compra (probabilidad + prediccion).
+#   2) Mostrar una recomendacion accionable (segundo boton, tras predecir).
 #
 # IMPORTANTE: para que funcione, la API debe estar corriendo en paralelo:
 #     uvicorn api:app --reload
@@ -13,6 +14,9 @@
 
 import streamlit as st
 import requests
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
 
 # ----------------------------------------------------------------------
 # CONFIGURACION DE LA PAGINA
@@ -24,10 +28,11 @@ st.set_page_config(
 )
 
 # ----------------------------------------------------------------------
-# URL DE LA API
+# URLS DE LA API
 # ----------------------------------------------------------------------
-# La API debe estar corriendo en esta direccion (uvicorn api:app --reload)
-API_URL = "http://127.0.0.1:8000/predict"
+# La API debe estar corriendo (uvicorn api:app --reload).
+# Se usa /recommend porque devuelve: probabilidad, prediccion y recomendacion.
+API_RECOMMEND_URL = "http://127.0.0.1:8000/recommend"
 
 # ----------------------------------------------------------------------
 # ESTILOS (CSS) para que se vea mas lindo
@@ -124,6 +129,17 @@ st.markdown("""
     .resultado-nocompra p {
         color: #922b21 !important;
     }
+
+    /* Cuadro de recomendacion (turquesa suave) */
+    .cuadro-reco {
+        background-color: #d6eaf8;
+        border-left: 6px solid #2980b9;
+        padding: 1.4rem;
+        border-radius: 10px;
+        margin-top: 1rem;
+    }
+    .cuadro-reco h3 { color: #1a5276 !important; }
+    .cuadro-reco p  { color: #1b4f72 !important; margin: 0.2rem 0; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -133,14 +149,14 @@ st.markdown("""
 # Logo centrado
 col_izq, col_centro, col_der = st.columns([1, 8, 1])
 with col_centro:
-    st.image("assets/LOGO2_2.png", use_container_width=True)
+    logo_path = BASE_DIR / "assets" / "LOGO2_2.png"
+
+    st.image(
+        logo_path,
+        use_container_width=True
+    )
 
 st.markdown('<div class="subtitulo">Prediccion de comportamiento de compra en e-commerce</div>', unsafe_allow_html=True)
-
-
-#st.markdown('<div class="titulo-principal">🛒 InsightLab</div>', unsafe_allow_html=True)
-#st.markdown('<div class="subtitulo">Prediccion de comportamiento de compra en e-commerce</div>', unsafe_allow_html=True)
-
 
 # ----------------------------------------------------------------------
 # DICCIONARIOS DE NOMBRES 
@@ -271,70 +287,59 @@ with col17:
         help="Se bloquea si ya elegiste un mes (la temporada se deriva del mes)."
     )
 
-
-# Dioccionarios ya definidos con menu desplegables. 
 # ======================================================================================
 # NOTA SOBRE LA OPCION "INDISTINTO"
 # ======================================================================================
 # Los desplegables incluyen la opcion "Indistinto" para los casos en los que el
 # usuario no necesita fijar un valor especifico de esa variable al predecir.
-#
-# COMO FUNCIONA POR DETRAS:
-# El modelo requiere un valor concreto en cada variable: no puede recibir campos
-# vacios ni evaluar "todos los valores posibles" a la vez. Por eso, cuando se elige
-# "Indistinto", la app envia internamente la MODA de esa variable (el valor mas
-# frecuente en el dataset de entrenamiento).
-#
-# De esta forma:
-#   - El usuario no esta obligado a definir manualmente cada campo.
-#   - El modelo recibe siempre un valor valido y representativo.
-#   - La prediccion se calcula usando el escenario mas tipico para esa variable.
-#
-# INTERPRETACION CORRECTA:
-# "Indistinto" NO significa "promedio de todos los escenarios posibles", sino
-# "valor mas comun / tipico". La prediccion corresponde a ese valor representativo.
-#
-# VALORES USADOS (moda de cada variable, calculada sobre Ecommerce.csv - 25.000 sesiones):
-#   device_type=1, user_type=1, marketing_channel=2, product_category=2,
-#   payment_method=1, added_to_cart=1, visit_season=3, visit_weekday=4,
-#   visit_day=20, visit_month=8, location=46
+# Cuando se elige "Indistinto", la app envia internamente la MODA de esa variable
+# (el valor mas frecuente en el dataset de entrenamiento). "Indistinto" NO significa
+# "promedio de todos los escenarios", sino "valor mas comun / tipico".
 # ======================================================================================
 
 # ----------------------------------------------------------------------
-# BOTON DE PREDICCION
+# FUNCIONES AUXILIARES: traducen lo elegido a numero (o moda si es "Indistinto")
+# ----------------------------------------------------------------------
+def resolver(valor_elegido, dicc_opts, nombre_var):
+    if valor_elegido == OPCION_ND:
+        return MODAS[nombre_var]
+    return dicc_opts[valor_elegido]
+
+def resolver_num(valor_elegido, nombre_var):
+    if valor_elegido == OPCION_ND:
+        return MODAS[nombre_var]
+    return int(valor_elegido)
+
+
+# ----------------------------------------------------------------------
+# NOTA: por que se usa st.session_state
+# ----------------------------------------------------------------------
+# Streamlit re-ejecuta TODO el script cada vez que se aprieta un boton.
+# Sin memoria, al apretar "VER RECOMENDACION" se perderia el resultado de
+# la prediccion anterior. st.session_state es esa memoria: guarda datos que
+# sobreviven entre re-ejecuciones (mientras la pestaña siga abierta).
+# Aca se guarda el resultado de la API y una bandera para mostrar la reco.
+# ----------------------------------------------------------------------
+
+
+# ----------------------------------------------------------------------
+# BOTON 1: PREDECIR COMPRA
 # ----------------------------------------------------------------------
 st.markdown("")  # espacio
 if st.button("PREDECIR COMPRA", use_container_width=True, type="primary"):
 
-    # Funcion auxiliar: traduce el valor elegido a numero.
-    # Si es "Indistinto", devuelve la moda de esa variable.
-    def resolver(valor_elegido, dicc_opts, nombre_var):
-        if valor_elegido == OPCION_ND:
-            return MODAS[nombre_var]
-        return dicc_opts[valor_elegido]
-
-    # Para los que son numericos escritos como texto (location, visit_day, visit_month)
-    def resolver_num(valor_elegido, nombre_var):
-        if valor_elegido == OPCION_ND:
-            return MODAS[nombre_var]
-        return int(valor_elegido)
-
-
-# Resolver coherencia mes <-> temporada
+    # Resolver coherencia mes <-> temporada
     if visit_month != OPCION_ND:
-        # Si se eligio mes, la temporada se deriva del mes (coherencia garantizada)
         mes_final = int(visit_month)
         season_final = MES_A_TEMPORADA[mes_final]
     elif visit_season != OPCION_ND:
-        # Si no hay mes pero si temporada, se usa un mes representativo de esa temporada
         season_final = visit_season_opts[visit_season]
         mes_final = TEMPORADA_A_MES[season_final]
     else:
-        # Ninguno definido: se usa la moda de ambos
         mes_final = MODAS["visit_month"]
         season_final = MODAS["visit_season"]
 
-    # Armar el diccionario con los datos, traduciendo nombres/Indistinto a numeros
+    # Armar el diccionario con los datos
     datos = {
         "device_type": resolver(device_type, device_type_opts, "device_type"),
         "user_type": resolver(user_type, user_type_opts, "user_type"),
@@ -355,55 +360,103 @@ if st.button("PREDECIR COMPRA", use_container_width=True, type="primary"):
         "location": resolver_num(location, "location")
     }
 
-    # Llamar a la API.
+    # Llamar a la API (endpoint /recommend, que trae todo)
     try:
-        respuesta = requests.post(API_URL, json=datos, timeout=10)
-
+        respuesta = requests.post(API_RECOMMEND_URL, json=datos, timeout=10)
         if respuesta.status_code == 200:
-            resultado = respuesta.json()
-            compra = resultado["compra"]
-            prob = resultado["probabilidad_compra"]
-
-            # Mostrar resultado segun si compra o no
-            # Mostrar resultado segun si compra o no
-            # Mostrar resultado segun si compra o no
-            if compra:
-                st.markdown(f"""
-                    <div style="background-color:#d5f5e3; border-left:8px solid #27ae60;
-                                padding:1.8rem; border-radius:10px; margin-top:1rem;">
-                        <div style="font-size:1.8rem; font-weight:800; color:#1e8449;">
-                        ✅ Probable COMPRA</div>
-                        <div style="font-size:1.05rem; color:#145a32; margin-top:0.4rem;">
-                        El modelo predice que esta sesion terminaria en compra.</div>
-                    </div>
-                """, unsafe_allow_html=True)
-            else:
-                st.markdown(f"""
-                    <div style="background-color:#fdedec; border-left:8px solid #e74c3c;
-                                padding:1.8rem; border-radius:10px; margin-top:1rem;">
-                        <div style="font-size:1.8rem; font-weight:800; color:#e74c3c;">
-                        ❌ Probable NO compra</div>
-                        <div style="font-size:1.05rem; color:#c0392b; margin-top:0.4rem;">
-                        El modelo predice que esta sesion NO terminaria en compra.</div>
-                    </div>
-                """, unsafe_allow_html=True)
-
-            # Mostrar la probabilidad como metrica y barra
-            if prob is not None:
-                st.markdown("")
-                st.metric("Probabilidad de compra", f"{prob*100:.1f}%")
-                st.progress(prob)
-
+            # Guardar el resultado en session_state para que el 2do boton lo recuerde
+            st.session_state["resultado"] = respuesta.json()
+            st.session_state["mostrar_reco"] = False  # se resetea al predecir de nuevo
         else:
+            st.session_state["resultado"] = None
             st.error(f"La API respondio con un error (codigo {respuesta.status_code}).")
-
     except requests.exceptions.ConnectionError:
+        st.session_state["resultado"] = None
         st.error("No se pudo conectar con la API. Verifica que este corriendo (uvicorn api:app --reload).")
     except Exception as e:
+        st.session_state["resultado"] = None
         st.error(f"Ocurrio un error: {e}")
+
+# ----------------------------------------------------------------------
+# MOSTRAR RESULTADO DE PREDICCION (si existe en session_state)
+# ----------------------------------------------------------------------
+# Se muestra PRIMERO la probabilidad (el dato de fondo) y DEBAJO la prediccion
+# como suposicion derivada ("probablemente compraria / no compraria").
+if st.session_state.get("resultado"):
+    resultado = st.session_state["resultado"]
+    prob = resultado.get("purchase_probability")     # 0.0 a 1.0
+    pred = resultado.get("purchase_prediction")       # 1 = compra, 0 = no compra
+
+    # 1) Probabilidad primero (protagonista)
+    if prob is not None:
+        st.metric("Probabilidad de compra", f"{prob*100:.1f}%")
+        st.progress(prob)
+
+    # 2) Prediccion como suposicion derivada
+    if pred == 1:
+        st.markdown(f"""
+            <div style="background-color:#d5f5e3; border-left:8px solid #27ae60;
+                        padding:1.4rem; border-radius:10px; margin-top:1rem;">
+                <div style="font-size:1.4rem; font-weight:800; color:#1e8449;">
+                Prediccion: esta sesion probablemente compraria</div>
+            </div>
+        """, unsafe_allow_html=True)
+    elif pred == 0:
+        st.markdown(f"""
+            <div style="background-color:#fdedec; border-left:8px solid #e74c3c;
+                        padding:1.4rem; border-radius:10px; margin-top:1rem;">
+                <div style="font-size:1.4rem; font-weight:800; color:#c0392b;">
+                Prediccion: esta sesion probablemente no compraria</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    # ------------------------------------------------------------------
+    # BOTON 2: VER RECOMENDACION (aparece solo despues de predecir)
+    # ------------------------------------------------------------------
+    st.markdown("")  # espacio
+    if st.button("VER RECOMENDACION", use_container_width=True):
+        st.session_state["mostrar_reco"] = True
+
+    # Mostrar la recomendacion si se apreto el boton
+    if st.session_state.get("mostrar_reco"):
+        accion = resultado.get("actions", "Sin accion definida")
+        intencion = resultado.get("purchase_intention", "-")
+        detalles = resultado.get("action_details", {}) or {}
+
+        # Se arman las lineas de detalle SOLO con las claves que existan
+        # (el motor devuelve claves distintas segun el caso: current_discount/incentive
+        #  cuando hay promocion, promotion_level cuando no).
+        lineas = []
+        if "category" in detalles:
+            lineas.append(f"<p><b>Categoria:</b> {detalles['category']}</p>")
+        if "channel" in detalles:
+            lineas.append(f"<p><b>Canal:</b> {detalles['channel']}</p>")
+        if "incentive" in detalles:
+            lineas.append(f"<p><b>Incentivo:</b> {detalles['incentive']}</p>")
+        if "current_discount" in detalles:
+            lineas.append(f"<p><b>Descuento actual:</b> {detalles['current_discount']}%</p>")
+        if "promotion_level" in detalles:
+            lineas.append(f"<p><b>Nivel de promocion:</b> {detalles['promotion_level']}</p>")
+        if "reason" in detalles:
+            lineas.append(f"<p><b>Motivo:</b> {detalles['reason']}</p>")
+        if "execution" in detalles:
+            lineas.append(f"<p><b>Ejecucion:</b> {detalles['execution']}</p>")
+
+        html_detalles = "".join(lineas)
+
+        st.markdown(f"""
+            <div class="cuadro-reco">
+                <div style="font-size:1.4rem; font-weight:800; color:#154360; margin-bottom:0.6rem;">Recomendacion sugerida</div>
+                <p><b>Accion:</b> {accion}</p>
+                <p><b>Intencion de compra:</b> {intencion}</p>
+                {html_detalles}
+            </div>
+        """, unsafe_allow_html=True)
 
 # ----------------------------------------------------------------------
 # PIE DE PAGINA
 # ----------------------------------------------------------------------
 st.markdown("---")
-st.caption("Proyecto InsightLab - Demo de prediccion de compra | Consume la API de FastAPI")
+st.caption("Proyecto InsightLab - Demo de prediccion y recomendacion | Consume la API de FastAPI")
+
+##

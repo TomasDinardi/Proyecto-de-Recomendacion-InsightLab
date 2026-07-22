@@ -1342,6 +1342,9 @@ Reglas asociadas a no compra
         ↓
 purchase_no
 ```
+---
+### `select_best_rule()`
+Selecciona la regla de asociación más relevante entre las reglas que coinciden con el comportamiento observado en una nueva sesión de usuario. La función prioriza las reglas según sus métricas de relevancia, como `lift` y `confidence`, y devuelve la mejor regla disponible para complementar la predicción del modelo supervisado. Si no se encuentra ninguna regla aplicable, devuelve `None`, permitiendo que el sistema genere una recomendación basada únicamente en la probabilidad de compra y el contexto del usuario.`
 
 ---
 
@@ -1355,23 +1358,40 @@ Los umbrales utilizados son:
 
 | Probabilidad | Intención |
 | ------------ | --------- |
-| `>= 0.70`    | `high`    |
-| `>= 0.40`    | `medium`  |
-| `< 0.40`     | `low`     |
+| `>= 0.70`    | `alta`    |
+| `>= 0.40`    | `media`  |
+| `< 0.40`     | `baja`     |
 
 Por ejemplo:
 
 ```text
 Probabilidad: 0.71
         ↓
-Intención: high
+Intención: alta
 ```
 
 Esta clasificación permite interpretar la probabilidad numérica desde una perspectiva de negocio.
 
 ---
+## Contexto de la compra
+### `extract_product_context()`
+Extrae el contexto de los productos de cada sesión como: categoría, marketing_channel, discount_percent y pages_viewed, para la personalización de recomendaciones y las devuelve en etiquetas descriptivas.
 
 ## Generación de la recomendación
+
+### `determine_incentive()`
+Determina el tipo de incentivo más adecuado para el usuario a partir de su nivel de intención de compra, la regla de asociación identificada y las características de la sesión. La función adapta la intensidad y el tipo de incentivo según la probabilidad de conversión, buscando evitar descuentos innecesarios para usuarios con alta intención y ofrecer incentivos más atractivos a usuarios con mayor riesgo de no conversión. Puede generar incentivos monetarios, como descuentos, o no monetarios, como envío gratuito, según el contexto del usuario.
+
+### `generate_action()`
+Genera la acción personalizada que se recomienda para cada usuario, integrando la probabilidad de compra estimada por el modelo supervisado, el nivel de intención de compra, la regla de asociación coincidente y el contexto del producto. La función determina la acción, el canal de contacto y el incentivo más adecuado, buscando maximizar la conversión y evitar incentivos innecesarios.
+
+#### Escenarios contemplados
+
+- **Intención alta:** prioriza acciones de bajo costo o no monetarias, como recordatorios o envío gratuito, evitando descuentos elevados cuando existe una alta probabilidad de compra.
+- **Intención media:** busca estimular la conversión mediante promociones o incentivos personalizados, considerando si la regla asociada indica un comportamiento histórico de compra o no compra.
+- **Intención baja:** utiliza incentivos más atractivos cuando existe una oportunidad de conversión, o acciones no monetarias y recomendaciones de productos cuando el usuario presenta baja intención.
+- **Sin regla de asociación:** genera la recomendación utilizando la probabilidad de compra, la intención y el contexto del producto, sin depender de una regla histórica específica.
+- **Contexto del producto:** adapta la acción y el incentivo a características como la categoría del producto, el canal de marketing, el dispositivo y otros atributos relevantes de la sesión.
 
 ### `generate_recommendation()`
 
@@ -1394,11 +1414,16 @@ Creación de elementos de sesión
         ↓
 Búsqueda de reglas coincidentes
         ↓
-Separación entre compra y no compra
+Selecciona la mejor regla según lift y confidence
         ↓
-Determinación de estrategia
+Analiza contexto de usuario
         ↓
-Resultado final
+generate_action()
+        ↓
+Define el incentivo más adecuado según el escenario
+        ↓
+Generar recomendación
+
 ```
 
 El motor combina la predicción del modelo supervisado con las reglas de asociación para determinar la estrategia final.
@@ -1407,137 +1432,67 @@ El motor combina la predicción del modelo supervisado con las reglas de asociac
 
 ## Estrategias de recomendación
 
-El sistema contempla las siguientes estrategias:
+El sistema de recomendación integra tres fuentes principales de información:
 
-### `high_conversion_intent`
+1. **Modelo supervisado:** estima la probabilidad de que el usuario finalice una compra.
+2. **Reglas de asociación:** identifican patrones de comportamiento históricamente relacionados con la compra (`purchase_yes`) o la no compra (`purchase_no`).
+3. **Contexto de la sesión:** considera características como la categoría del producto, canal de marketing, dispositivo, método de pago, navegación, carrito y nivel de descuento.
 
-Se selecciona cuando:
-
-```text
-Modelo predice compra
-+
-Existe al menos una regla asociada a compra
-```
-
-Esta es la estrategia que representa la mayor coincidencia entre ambos enfoques.
-
-Conceptualmente:
-
-```text
-Modelo supervisado
-        ↓
-Predice compra
-
-Reglas de asociación
-        ↓
-También identifican un patrón asociado a compra
-
-        ↓
-
-high_conversion_intent
-```
-
-Por ejemplo:
-
-```text
-Probabilidad de compra: 0.71
-Predicción: 1
-Reglas de compra coincidentes: 3
-```
-
-Resultado:
-
-```text
-high_conversion_intent
-```
-
----
-
-### `model_predicted_purchase`
-
-Se selecciona cuando el modelo supervisado predice una compra, pero no se encuentra ninguna regla de asociación coincidente relacionada con la compra.
-
-```text
-Modelo predice compra
-+
-No hay reglas coincidentes de compra
-```
-
-Esto indica que el modelo identifica una probabilidad positiva de conversión, aunque el comportamiento específico de la sesión no coincida con los patrones seleccionados por las reglas de asociación.
-
----
-
-### `association_predicted_purchase`
-
-Se selecciona cuando existe una regla asociada a compra, aunque el modelo supervisado no haya realizado una predicción positiva.
-
-```text
-Modelo no predice compra
-+
-Existe una regla asociada a compra
-```
-
-En este escenario, las reglas aportan una señal adicional que puede ser considerada por la estrategia de personalización.
-
----
-
-### `low_conversion_intent`
-
-Se selecciona cuando la sesión coincide con una o más reglas asociadas a `purchase_no`.
-
-```text
-No existen reglas de compra coincidentes
-+
-Existe una regla de no compra
-```
-
-Este resultado permite identificar comportamientos históricamente asociados con una menor probabilidad de conversión.
-
----
-
-### `insufficient_evidence`
-
-Se selecciona cuando:
-
-```text
-El modelo no predice compra
-+
-No existen reglas de compra coincidentes
-+
-No existen reglas de no compra coincidentes
-```
-
-En este caso, el sistema no cuenta con suficiente evidencia para clasificar el comportamiento de la sesión dentro de una estrategia específica.
-
----
+A partir de estas señales, el motor de recomendación determina el nivel de intención de compra y genera una acción personalizada.
 
 ## Resultado generado
 
-El motor devuelve un diccionario con la información completa de la recomendación:
+El motor devuelve un diccionario con la información completa de la recomendación personalizada:
 
 ```python
 {
-    "purchase_probability": 0.71,
-    "purchase_prediction": 1,
-    "purchase_intention": "high",
-    "strategy": "high_conversion_intent",
-    "matched_purchase_rules": [...],
-    "matched_no_purchase_rules": [...],
-    "session_items": {...}
+    "purchase_probability": 0.47,
+    "purchase_prediction": 0,
+    "purchase_intention": "medium",
+    "actions": [
+        "Ofrecer promoción por categoría"
+    ],
+    "action_details": {
+        "category": "Móviles y Electrónica",
+        "channel": "WhatsApp Conversational",
+        "execution": "Envío gratuito"
+    },
+    "matched_rule": {
+        "antecedents": {
+            "cart_added",
+            "high_navigation",
+            "new_user"
+        },
+        "consequents": {
+            "purchase_yes"
+        },
+        "outcome": "purchase_yes",
+        "support": 0.06012,
+        "confidence": 0.2921,
+        "lift": 1.3004
+    }
 }
 ```
 
 La salida contiene:
 
-| Campo                       | Descripción                                                |
-| --------------------------- | ---------------------------------------------------------- |
-| `purchase_probability`      | Probabilidad estimada de compra por el modelo supervisado. |
-| `purchase_prediction`       | Predicción binaria del modelo.                             |
-| `purchase_intention`        | Nivel de intención: `high`, `medium` o `low`.              |
-| `strategy`                  | Estrategia final determinada por el motor.                 |
-| `matched_purchase_rules`    | Reglas asociadas a compra que coinciden con la sesión.     |
-| `matched_no_purchase_rules` | Reglas asociadas a no compra que coinciden con la sesión.  |
-| `session_items`             | Conjunto de características observables de la sesión.      |
+| Campo | Descripción |
+|---|---|
+| `purchase_probability` | Probabilidad estimada de compra calculada por el modelo supervisado. |
+| `purchase_prediction` | Predicción binaria del modelo: `1` indica compra y `0` indica no compra. |
+| `purchase_intention` | Nivel de intención de compra estimado a partir de la probabilidad: `high`, `medium` o `low`. |
+| `actions` | Acción o conjunto de acciones recomendadas para el usuario según su intención, comportamiento y contexto. |
+| `action_details` | Detalle de la recomendación generada para la sesión. Incluye la categoría de producto, el canal de contacto y el incentivo o ejecución sugerida. |
+| `action_details["category"]` | Categoría del producto sobre la cual se contextualiza la recomendación. |
+| `action_details["channel"]` | Canal de contacto o interacción recomendado para ejecutar la acción. |
+| `action_details["execution"]` | Incentivo o mecanismo de ejecución de la acción, por ejemplo, `Envío gratuito`, `Descuento personalizado` o `Sin incentivo`. |
+| `matched_rule` | Regla de asociación más relevante que coincide con el comportamiento observado en la sesión. Puede corresponder a una regla de `purchase_yes` o `purchase_no`. |
+| `matched_rule["antecedents"]` | Conjunto de características del usuario que coinciden con el antecedente de la regla seleccionada. |
+| `matched_rule["consequents"]` | Consecuente de la regla, que representa el resultado históricamente asociado al patrón observado. |
+| `matched_rule["outcome"]` | Resultado asociado a la regla: `purchase_yes` o `purchase_no`. |
+| `matched_rule["support"]` | Frecuencia relativa con la que el patrón completo de la regla aparece en el conjunto de datos. |
+| `matched_rule["confidence"]` | Probabilidad de observar el consecuente cuando se presenta el antecedente de la regla. |
+| `matched_rule["lift"]` | Medida de la fuerza de asociación entre el antecedente y el consecuente respecto a su ocurrencia independiente. |
 
 ---
 
@@ -1565,8 +1520,14 @@ Predicción:
 Intención:
 high
 
-Estrategia:
-high_conversion_intent
+Acción:
+Recordatorio de carrito
+
+Canal:
+WhatsApp Conversational
+
+Incentivo:
+Envío gratuito
 ```
 
 Además, puede identificar reglas como:
@@ -1592,24 +1553,44 @@ La integración entre los componentes queda estructurada de la siguiente manera:
 ```text
 Nueva sesión de usuario
         │
-        ├──────────────────────────┐
-        │                          │
-        ▼                          ▼
-Modelo supervisado          Preprocesamiento
-        │                    para reglas
-        ▼                          │
-Probabilidad de compra             ▼
-        │                    Elementos de sesión
-        │                          │
-        │                          ▼
-        │                    Reglas coincidentes
-        │                          │
-        └──────────────┬───────────┘
-                       ▼
-             Motor de recomendación
+        ├─────────────────────────────┐
+        │                             │
+        ▼                             ▼
+Preparación de datos          Preprocesamiento
+        │                     para reglas
+        │                             │
+        ▼                             ▼
+Preprocessor.pkl             Reglas seleccionadas
+        │                     Association Rules
+        ▼                             │
+Modelo supervisado                   │
+        │                             │
+        ▼                             ▼
+Probabilidad de compra        Reglas coincidentes
+        │                             │
+        ▼                             ▼
+Intención de compra           select_best_rule()
+        │                             │
+        └──────────────┬──────────────┘
                        │
                        ▼
-             Estrategia de negocio
+              Contexto de la sesión
+                       │
+                       ▼
+               generate_action()
+                       │
+                       ├───────────────┐
+                       │               │
+                       ▼               ▼
+             determine_incentive()    Canal
+                       │               │
+                       └───────┬───────┘
+                               ▼
+                    Recomendación final
+                               │
+                 ┌─────────────┼─────────────┐
+                 ▼             ▼             ▼
+               Acción        Canal       Incentivo
 ```
 
 Este diseño permite separar claramente:
@@ -1621,7 +1602,6 @@ Análisis de patrones
         ↓
 Decisión de recomendación
 ```
-
 ---
 
 ## Rol dentro del proyecto
@@ -1652,33 +1632,94 @@ recommendation_engine.py
 
 utiliza los artefactos generados por ambos procesos para analizar nuevas sesiones.
 
-El flujo completo queda:
-
-```text
-Dataset
-    ↓
-Feature Engineering
-    ↓
-Entrenamiento del modelo supervisado
-    ↓
-decision_tree.pkl
-    │
-    ├──────────────────────┐
-    │                      │
-    ▼                      ▼
-Preprocessor         Reglas de asociación
-    │                      │
-    ▼                      ▼
-Nueva sesión ────────→ RecommendationEngine
-                           │
-                           ▼
-                 Predicción + patrones
-                           │
-                           ▼
-                  Estrategia recomendada
-```
-
 De esta manera, el proyecto evoluciona desde un modelo de predicción aislado hacia un sistema de recomendación que combina aprendizaje supervisado, aprendizaje no supervisado mediante reglas de asociación y lógica de negocio.
+
+
+
+## `api.py`
+
+### Objetivo del archivo
+El archivo `api.py` expone el sistema de predicción y recomendación del proyecto a través de una API construida con FastAPI. Su objetivo es poner los modelos entrenados a disposición de un usuario o aplicación externa, permitiendo enviar los datos de una sesión de e-commerce y obtener como respuesta tanto la probabilidad de compra como una recomendación accionable.
+
+De esta manera, la API funciona como la capa de entrega del proyecto: traduce los artefactos generados durante el entrenamiento (preprocessor y modelo) y la lógica del motor de recomendación en un servicio consultable de forma estandarizada.
+
+---
+### Funcionamiento General
+La API carga al iniciarse el preprocesador (`preprocessor.pkl`) y el modelo supervisado definido como modelo final del proyecto. Adicionalmente, instancia el motor de recomendación (`RecommendationEngine`) reutilizando ese mismo modelo y preprocesador, junto con las reglas de asociación seleccionadas. Si alguno de estos artefactos no se encuentra disponible, la API igualmente se inicia y lo informa, evitando interrumpir el resto del servicio.
+
+Los datos de entrada se validan mediante un esquema de Pydantic (`SesionUsuario`), que define las 18 variables esperadas de la sesión y sus tipos. Antes de la predicción, la API deriva internamente la variable `tiempo_por_pagina` y ordena las columnas en el mismo formato utilizado durante el entrenamiento, garantizando coherencia con el preprocesador.
+
+La API expone tres endpoints:
+
+- **`GET /`**: endpoint de verificación que informa si el preprocesador, el modelo y el motor de recomendación se cargaron correctamente.
+- **`POST /predict`**: recibe los datos de una sesión y devuelve la predicción de compra y su probabilidad. Corresponde al resultado "crudo" del modelo supervisado.
+- **`POST /recommend`**: recibe los mismos datos y devuelve una recomendación completa, que combina la probabilidad de compra, la intención estimada, las reglas de asociación coincidentes y la acción sugerida. Reutiliza el motor de recomendación sin modificar su código.
+
+Ambos endpoints de predicción utilizan el mismo modelo y preprocesador, de modo que el resultado sea coherente entre la predicción directa y la recomendación.
+
+---
+### Flujo General de trabajo
+```text
+Datos de la sesión (JSON)
+       ↓
+Validación con Pydantic (SesionUsuario)
+       ↓
+Derivación de variables + ordenamiento de columnas
+       ↓
+Preprocesamiento (preprocessor.pkl)
+       ↓
+   ┌──────────────┴──────────────┐
+   ▼                             ▼
+/predict                     /recommend
+Modelo supervisado           RecommendationEngine
+   │                             │
+   ▼                             ▼
+Predicción +                 Predicción + reglas +
+probabilidad                 intención + acción sugerida
+```
+---
+### Modelo utilizado
+La API está configurada para utilizar por defecto el modelo de regresión logística balanceada (`logistic_regression_balanced.pkl`), seleccionado por priorizar la métrica de Recall. El modelo puede cambiarse modificando una única línea de configuración, y el modelo elegido se aplica de forma coherente tanto en `/predict` como en `/recommend`.
+
+---
+### Salida del archivo `api.py`
+El archivo pone en funcionamiento un servicio web que permite consultar el sistema de predicción y recomendación de forma estandarizada. Es consumido por la demo desarrollada en `streamlit_app.py`, que utiliza sus endpoints para ofrecer una interfaz visual al usuario final.
+
+---
+## `streamlit_app.py`
+### Objetivo del archivo
+El archivo `streamlit_app.py` implementa una interfaz visual interactiva que permite utilizar el sistema de predicción y recomendación sin necesidad de conocimientos técnicos. Su objetivo es ofrecer una demostración accesible del proyecto, en la que el usuario carga los datos de una sesión mediante formularios y obtiene los resultados de forma clara y visual.
+
+La aplicación no ejecuta los modelos directamente, sino que consume la API desarrollada en `api.py`, manteniendo separada la interfaz de la lógica de predicción.
+
+---
+### Funcionamiento General
+La interfaz presenta un formulario con las variables de la sesión, organizadas en secciones (perfil del usuario, origen y producto, precio y navegación, y datos temporales). Para facilitar su uso, varios campos incluyen la opción "Indistinto", que envía internamente el valor más frecuente de esa variable en el dataset, evitando que el usuario deba definir manualmente cada dato.
+
+Al presionar el botón de predicción, la aplicación arma los datos de la sesión, los envía a la API y muestra en primer lugar la probabilidad de compra, seguida de la predicción interpretada como una estimación ("probablemente compraría" o "probablemente no compraría"). Una vez obtenida la predicción, se habilita un segundo botón que permite visualizar la recomendación completa: la acción sugerida, la intención de compra y los detalles de la promoción propuesta.
+
+Dado que Streamlit vuelve a ejecutar el script completo ante cada interacción, la aplicación utiliza `st.session_state` para conservar el resultado de la predicción entre acciones, permitiendo que la recomendación se muestre sin perder la información previa.
+
+---
+### Flujo General de trabajo
+```text
+Formulario de datos de la sesión
+       ↓
+Traducción de opciones a valores numéricos
+       ↓
+Envío de la sesión a la API (endpoint /recommend)
+       ↓
+Muestra de la probabilidad de compra
+       ↓
+Muestra de la predicción interpretada
+       ↓
+Botón "Ver recomendación"
+       ↓
+Muestra de la acción y promoción sugeridas
+```
+---
+### Salida del archivo `streamlit_app.py`
+El archivo ofrece la capa de presentación del proyecto: una aplicación visual que consume la API y traduce sus respuestas en una experiencia comprensible para el usuario final, integrando en una misma pantalla la predicción de compra y la recomendación asociada.
 
 ---
 

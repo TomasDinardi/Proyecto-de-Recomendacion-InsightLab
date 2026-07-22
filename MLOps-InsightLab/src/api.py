@@ -22,6 +22,8 @@ import os
 # porque el ColumnTransformer las referencia internamente.
 from ft_engineering import log_func, to_str_func
 
+from recommendation_engine import RecommendationEngine
+
 # ----------------------------------------------------------------------
 # RUTAS A LOS ARCHIVOS .PKL
 # ----------------------------------------------------------------------
@@ -48,6 +50,10 @@ MODELO_PATH = os.path.join(MODELS_DIR, "logistic_regression_balanced.pkl")
 # MODELO_PATH = os.path.join(MODELS_DIR, "random_forest.pkl")
 # MODELO_PATH = os.path.join(MODELS_DIR, "xgboost.pkl")
 
+# --- Archivos que necesita el motor de recomendacion ---
+RULES_PATH = os.path.join(MODELS_DIR, "selected_association_rules.pkl")
+RULES_PREPROCESSING_PATH = os.path.join(MODELS_DIR, "rules_preprocessing.pkl")
+
 # ----------------------------------------------------------------------
 # CARGA DEL PREPROCESADOR Y EL MODELO
 # ----------------------------------------------------------------------
@@ -62,6 +68,22 @@ try:
 except FileNotFoundError:
     modelo = None
     print(f"[ADVERTENCIA] No se encontro el modelo en: {MODELO_PATH}")
+
+# ----------------------------------------------------------------------
+# CARGA DEL MOTOR DE RECOMENDACION (para /recommend)
+# ----------------------------------------------------------------------
+try:
+    motor_recomendacion = RecommendationEngine(
+        model_path=MODELO_PATH,
+        rules_path=RULES_PATH,
+        rules_preprocessing_path=RULES_PREPROCESSING_PATH,
+        preprocessor_path=PREPROCESSOR_PATH
+    )
+except FileNotFoundError:
+    motor_recomendacion = None
+    print("[ADVERTENCIA] No se pudo instanciar el motor de recomendacion. "
+          "Verificar que esten los .pkl de modelo, preprocessor y reglas en models/.")
+
 
 # ----------------------------------------------------------------------
 # INICIALIZACION DE LA API
@@ -170,7 +192,8 @@ def raiz():
     return {
         "mensaje": "API de prediccion InsightLab activa",
         "preprocesador_cargado": preprocessor is not None,
-        "modelo_cargado": modelo is not None
+        "modelo_cargado": modelo is not None,
+        "motor_recomendacion_cargado": motor_recomendacion is not None
     }
 
 # ----------------------------------------------------------------------
@@ -205,3 +228,29 @@ def predecir(sesion: SesionUsuario):
         "compra": bool(prediccion == 1),
         "probabilidad_compra": probabilidad
     }
+
+# ----------------------------------------------------------------------
+# ENDPOINT DE RECOMENDACION (prediccion + intencion + regla + accion)
+# ----------------------------------------------------------------------
+@app.post("/recommend")
+def recomendar(sesion: SesionUsuario):
+    if motor_recomendacion is None:
+        raise HTTPException(
+            status_code=503,
+            detail="El motor de recomendacion no esta disponible. Verificar que esten "
+                   "en models/ los archivos: modelo, preprocessor.pkl, "
+                   "selected_association_rules.pkl y rules_preprocessing.pkl."
+        )
+
+    # Se arma la sesion con las mismas variables + la derivada tiempo_por_pagina,
+    # que es lo que el motor espera recibir como 'session_data'.
+    session_data = sesion.model_dump()
+    session_data["tiempo_por_pagina"] = (
+        session_data["time_on_site_sec"] / session_data["pages_viewed"]
+    )
+
+    # El motor hace todo: predice, clasifica intencion, busca reglas y arma la accion.
+    resultado = motor_recomendacion.generate_recommendation(session_data)
+
+    return resultado
+
