@@ -278,47 +278,6 @@ class RecommendationEngine:
 
         else:
             return "baja"
-
-    # Función para identificar el perfil de comportamiento
-    @staticmethod
-    def identify_behavior_profile(session_data ):
-        """
-        Devuelve el perfil del usuario de acuerdo a su comportamiento
-        en una sesión
-        """
-        profiles = []
-        
-        if session_data.get("added_to_cart") == 1:
-            profiles.append(
-                "cart_intent" )
-        
-        pages_viewed = session_data.get(
-            "pages_viewed")
-
-
-        if (
-            pages_viewed is not None
-            and pages_viewed > 7
-        ):
-
-            profiles.append(
-                "high_navigation"
-            )
-
-        if session_data.get("user_type" ) == 0:
-
-            profiles.append("new_user" )
-
-        elif session_data.get("user_type") == 1:
-
-            profiles.append("returning_user")
-
-
-        if session_data.get("session_duration_bucket") == "long":
-
-            profiles.append("high_engagement" )
-
-        return profiles
     
     @staticmethod
     def extract_product_context(session_data):
@@ -347,8 +306,9 @@ class RecommendationEngine:
             5: "Social Influencer"
         }
         
-        
-        return {"product_category": product_categories.get(
+        return {
+            "product_category": 
+                product_categories.get(
                     session_data.get(
                         "product_category"
                     ),
@@ -388,16 +348,12 @@ class RecommendationEngine:
         matching_rules = sorted(matching_rules,key=lambda rule: (len(
                     rule["antecedents"]
                 ),
-
                 rule["confidence"],
-
                 rule["lift"]
-
             ),
 
             reverse=True
         )
-
 
         if not matching_rules:
             return None
@@ -413,17 +369,17 @@ class RecommendationEngine:
         Se priorizan beneficios no monetarios.
         """   
         if current_discount >= 20:
-             return { "type": "no monetario", 
-                     "recommendation": "Envío gratis",
-                       "reason": "El usuario ya cuenta con un descuento elevado" } 
+            return { "type": "no monetario", 
+                    "recommendation": "Envío gratis",
+                    "reason": "El usuario ya cuenta con un descuento elevado" } 
         elif current_discount >= 10: 
             return { "type": "moderado",
-                     "recommendation": "Envío gratuito o beneficio complementario",
+                    "recommendation": "Envío gratuito o beneficio complementario",
                     "reason": "El usuario ya cuenta con un descuento moderado" } 
         else:
             return { "type": "monetario",
-                     "recommendation": "Descuento moderado en la categoría",
-                       "reason": "El usuario cuenta con un descuento bajo o no cuenta con descuento" } 
+                    "recommendation": "Descuento moderado en la categoría",
+                    "reason": "El usuario cuenta con un descuento bajo o no cuenta con descuento" } 
 
 
 
@@ -458,7 +414,7 @@ class RecommendationEngine:
             "discount_percent"]
         
         incentive = (self.determine_incentive(current_discount))
-       
+
         # Escenario 1 Alta Intención
         if intention == "alta":
             
@@ -502,35 +458,37 @@ class RecommendationEngine:
                 else:
                     action = ( "Ofrecer promoción personalizada por categoría" ) 
                     action_details = { "category": category, 
-                                      "channel": marketing_channel,
-                                      "current_discount": current_discount,
-                                      "incentive": incentive[ "recommendation" ], 
-                                      "reason": "Intención media y comportamiento asociado históricamente con la compra", 
-                                      "execution": "Ofrecer incentivo moderado por categoría" }
+                                    "channel": marketing_channel,
+                                    "current_discount": current_discount,
+                                    "incentive": incentive[ "recommendation" ], 
+                                    "reason": "Intención media y comportamiento asociado históricamente con la compra", 
+                                    "execution": "Ofrecer incentivo moderado por categoría" }
                     
             elif rule_outcome == "purchase_no":
                 action = ("Recomendar productos de la categoría"
                 )
 
-                action_details = {"category": category,
-                                  "promotion_level": "light",
-                                  "channel": marketing_channel,
-                                  "current_discount": current_discount,
-                                  "promotion_level": "baja",
-                                  "reason": "Intención media y comportamiento asociado históricamente con la no compra",
-                                  "execution": "Mostrar productos relevantes antes de usar incentivos fuertes"
+                action_details = {
+                    "category": category,
+                    "promotion_level": "light",
+                    "channel": marketing_channel,
+                    "current_discount": current_discount,
+                    "promotion_level": "baja",
+                    "reason": "Intención media y comportamiento asociado históricamente con la no compra",
+                    "execution": "Mostrar productos relevantes antes de usar incentivos fuertes"
                 }
 
             else:
 
                 action = ( "Ofrecer promoción ligera por categoría")
 
-                action_details = {"category": category,
-                                  "channel": marketing_channel,
-                                  "current_discount": current_discount,
-                                  "promotion_level":"baja",
-                                  "reason": "Intención media sin un patrón de comportamiento claramente asociado",
-                                  "execution": "test_light_category_incentive"
+                action_details = {
+                    "category": category,
+                    "channel": marketing_channel,
+                    "current_discount": current_discount,
+                    "promotion_level":"baja",
+                    "reason": "Intención media sin un patrón de comportamiento claramente asociado",
+                    "execution": "test_light_category_incentive"
                 }
         #Escenario 3 Baja Inteción
 
@@ -540,13 +498,14 @@ class RecommendationEngine:
 
                 action = ("Recomendar productos populares de la categoría")
 
-                action_details = { "category": category,
-                                  "promotion_level": "none_or_light",
-                                  "channel": marketing_channel,
-                                  "current_discount": current_discount,
-                                  "promotion_level": "ninguna o baja",
-                                  "reason":"Baja intención y comportamiento asociado históricamente con la no compra",
-                                  "execution": "priorizar descubrimiento de nuevos productos por encima de descuentos"
+                action_details = {
+                    "category": category,
+                    "promotion_level": "none_or_light",
+                    "channel": marketing_channel,
+                    "current_discount": current_discount,
+                    "promotion_level": "ninguna o baja",
+                    "reason":"Baja intención y comportamiento asociado históricamente con la no compra",
+                    "execution": "priorizar descubrimiento de nuevos productos por encima de descuentos"
                 }
 
             elif rule_outcome == "purchase_yes":
@@ -554,32 +513,35 @@ class RecommendationEngine:
 
                     action = ("Ofrecer incentivo de bajo costo por categoría")
 
-                    action_details = {"category":category,
-                                    "promotion_level":"low",
-                                    "channel": marketing_channel,
-                                    "current_discount": current_discount,
-                                    "incentive": incentive[ "recommendation" ],
-                                    "reason":"Baja probabilidad de compra, aunque el comportamiento presenta un patrón asociado con la compra",
-                                    "execution": "Utilizar beneficios de bajo costo para incentivar la conversión a comprador"
+                    action_details = {
+                        "category":category,
+                        "promotion_level":"low",
+                        "channel": marketing_channel,
+                        "current_discount": current_discount,
+                        "incentive": incentive[ "recommendation" ],
+                        "reason":"Baja probabilidad de compra, aunque el comportamiento presenta un patrón asociado con la compra",
+                        "execution": "Utilizar beneficios de bajo costo para incentivar la conversión a comprador"
                     }
                 else:
                     action = ( "Ofrecer incentivo de bajo costo por categoría" )
-                    action_details = { "category": category,
-                                       "channel": marketing_channel,
-                                       "current_discount": current_discount,
-                                       "incentive": "Descuento ligero en la categoría", 
-                                       "reason": "Baja probabilidad de compra, aunque el comportamiento presenta un patrón asociado con la compra", 
-                                       "execution": "Usar incentivos de bajo costo para generar interés" }
+                    action_details = {
+                        "category": category,
+                        "channel": marketing_channel,
+                        "current_discount": current_discount,
+                        "incentive": "Descuento ligero en la categoría", 
+                        "reason": "Baja probabilidad de compra, aunque el comportamiento presenta un patrón asociado con la compra", 
+                        "execution": "Usar incentivos de bajo costo para generar interés" }
 
             else:
 
                 action = ("Recomendar productos personalizados")
 
-                action_details = {"category":category,
-                                  "channel": marketing_channel,
-                                  "promotion_level":"ninguno",
-                                  "reason":"Baja probabilidad de compra",
-                                  "execution": "Priorizar el descubrimiento de productos y las recomendaciones personalizadas"
+                action_details = {
+                    "category":category,
+                    "channel": marketing_channel,
+                    "promotion_level":"ninguno",
+                    "reason":"Baja probabilidad de compra",
+                    "execution": "Priorizar el descubrimiento de productos y las recomendaciones personalizadas"
                 }
 
         return {
@@ -666,15 +628,10 @@ class RecommendationEngine:
         )
         action_result = (
             self.generate_action(
-
                 session_data,
-
                 probability,
-
                 intention,
-
                 best_rule,
-
                 product_context
             )
         )
@@ -731,15 +688,14 @@ def main():
 
     engine = RecommendationEngine(
 
-        model_path=model_path,
-
-        rules_path=rules_path,
-
-        rules_preprocessing_path=(
+        model_path = model_path,
+        rules_path = rules_path,
+        
+        rules_preprocessing_path = (
             rules_preprocessing_path
         ),
-
-        preprocessor_path=(
+        
+        preprocessor_path = (
             preprocessor_path
         )
 
@@ -1174,13 +1130,9 @@ def main():
                 f"{scenario_name}:"
             )
 
-            print(
-            f"Tipo de error: {type(e).__name__}"
-            )
+            print(f"Tipo de error: {type(e).__name__}")
 
-            print(
-                    f"Mensaje: {e}"
-                         )
+            print(f"Mensaje: {e}")
             
             traceback.print_exc()
 
