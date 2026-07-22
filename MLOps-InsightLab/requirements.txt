@@ -16,6 +16,7 @@ catboost
 # Persistencia de modelos y tracking
 joblib
 mlflow
+mlxtend
 
 # Notebooks
 notebook
