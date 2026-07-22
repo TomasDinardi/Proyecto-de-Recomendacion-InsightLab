@@ -14,6 +14,9 @@
 
 import streamlit as st
 import requests
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent
 
 # ----------------------------------------------------------------------
 # CONFIGURACION DE LA PAGINA
@@ -146,7 +149,12 @@ st.markdown("""
 # Logo centrado
 col_izq, col_centro, col_der = st.columns([1, 8, 1])
 with col_centro:
-    st.image("assets/LOGO2_2.png", use_container_width=True)
+    logo_path = BASE_DIR / "assets" / "LOGO2_2.png"
+
+    st.image(
+        logo_path,
+        use_container_width=True
+    )
 
 st.markdown('<div class="subtitulo">Prediccion de comportamiento de compra en e-commerce</div>', unsafe_allow_html=True)
 
