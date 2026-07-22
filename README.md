@@ -1723,6 +1723,91 @@ El archivo ofrece la capa de presentación del proyecto: una aplicación visual 
 
 ---
 
+## Guía de uso: Levantar la aplicación
+
+La demo del proyecto está formada por **dos procesos que se ejecutan en paralelo**: la **API** (FastAPI) que contiene el modelo y la lógica de recomendación, y la **interfaz Streamlit** que consume esa API. Ambos deben estar corriendo en dos terminales distintas.
+
+### Requisitos previos
+
+Cada integrante debe tener en su máquina:
+
+- El repositorio clonado y actualizado con la última versión de la rama `develop` o `certification`.
+- El entorno virtual `insightlab-venv` creado, con las dependencias instaladas (`pip install -r requirements.txt`).
+- Los archivos de modelos (`.pkl`) en la carpeta `MLOps-InsightLab/src/models/`.
+
+**Nota:** La ruta de cada integrante es distinta según dónde tenga guardado el proyecto. En los comandos siguientes, reemplazar `TU_USUARIO` y los puntos suspensivos por la ruta correspondiente hasta llegar a `MLOps-InsightLab/src`.
+
+### Terminal 1: Levantar la API
+
+Abrir una terminal de Git Bash y ejecutar:
+
+```bash
+cd /c/Users/TU_USUARIO/.../MLOps-InsightLab/src
+source ../../insightlab-venv/Scripts/activate
+uvicorn api:app --reload
+```
+
+Esperar hasta que aparezca el mensaje `Application startup complete`. Esa terminal queda abierta y no se toca más.
+
+Para verificar que la API funciona, abrir en el navegador: `http://127.0.0.1:8000/docs` (aparece la documentación interactiva con los endpoints).
+
+### Terminal 2: Levantar el Streamlit
+
+Abrir una **segunda** terminal de Git Bash (dejando la primera corriendo) y ejecutar:
+
+```bash
+cd /c/Users/TU_USUARIO/.../MLOps-InsightLab/src
+source ../../insightlab-venv/Scripts/activate
+streamlit run streamlit_app.py
+```
+
+Se abre automáticamente el navegador con la interfaz. Al apretar **PREDECIR COMPRA** se muestra la probabilidad y la predicción; luego, con **VER RECOMENDACIÓN**, se despliega la recomendación completa.
+
+**Importante:** Las dos terminales deben estar ubicadas en la carpeta `src` y con el entorno virtual activado. Así funcionan correctamente las rutas del logo y de los modelos.
+
+### Solución de errores comunes
+
+#### "No se pudo conectar con la API"
+
+**Causa:** El Streamlit está corriendo pero la API no está levantada.
+
+**Solución:** Abrir la Terminal 1 y levantar la API (`uvicorn api:app --reload`). Esperar el mensaje `Application startup complete` y volver a apretar PREDECIR COMPRA.
+
+#### uvicorn no se ejecuta / no encuentra api:app
+
+**Causa:** La terminal no está ubicada en la carpeta `src`.
+
+**Solución:** Ubicarse en `src` antes de levantar la API. O, alternativamente, correr desde la raíz:
+
+```bash
+uvicorn api:app --reload --app-dir MLOps-InsightLab/src
+```
+
+#### MediaFileStorageError: Error opening 'assets/LOGO2_2.png'
+
+**Causa:** El Streamlit se está ejecutando desde una carpeta distinta a `src`.
+
+**Solución:** Ejecutar el Streamlit parado en `src`. El código arma la ruta del logo de forma absoluta.
+
+#### ModuleNotFoundError (por ejemplo, mlxtend)
+
+**Causa:** Falta una librería en el entorno virtual.
+
+**Solución:** Con el entorno activado, instalar las dependencias:
+
+```bash
+pip install -r requirements.txt
+```
+
+#### El entorno virtual no se activa
+
+**Causa:** La ruta al entorno o el nombre de la carpeta no coinciden.
+
+**Solución:** Verificar que la carpeta `insightlab-venv` exista y que la ruta relativa `../../insightlab-venv/Scripts/activate` sea correcta desde `src`.
+
+
+---
+
 # Cómo construir la imagen Docker — MLOps-InsightLab
 
 Esta guía explica paso a paso cómo generar la imagen Docker de la API del proyecto.
