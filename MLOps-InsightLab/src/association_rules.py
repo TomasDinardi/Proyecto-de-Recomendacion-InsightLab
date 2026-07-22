@@ -109,36 +109,22 @@ NAVIGATION_LABELS = [
 # 3. CONFIGURACIÓN PARA EXPORTAR EL PREPROCESAMIENTO
 
 RULES_PREPROCESSING = {
-
     "device_map": DEVICE_MAP,
-
     "user_type_map": USER_TYPE_MAP,
-
     "purchase_map": PURCHASE_MAP,
-
     "added_to_cart_map": ADDED_TO_CART_MAP,
-
     "marketing_channel_map": MARKETING_CHANNEL_MAP,
-
     "product_category_map": PRODUCT_CATEGORY_MAP,
-
     "payment_method_map": PAYMENT_METHOD_MAP,
-
     "discount_bins": DISCOUNT_BINS,
-
     "discount_labels": DISCOUNT_LABELS,
-
     "navigation_bins": NAVIGATION_BINS,
-
     "navigation_labels": NAVIGATION_LABELS
 }
 
 # 4. FUNCIÓN DE PREPROCESAMIENTO
 
-def preprocess_for_rules(
-    df,
-    config=RULES_PREPROCESSING
-):
+def preprocess_for_rules(df, config=RULES_PREPROCESSING):
     """
     Preprocesa los datos utilizando la misma lógica
     empleada durante el entrenamiento de las reglas.
