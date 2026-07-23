@@ -1,6 +1,7 @@
 #Librerias
 import numpy as np
-import pandas as pd
+import joblib
+import os
 from sklearn.preprocessing import FunctionTransformer
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -9,6 +10,13 @@ from sklearn.preprocessing import OneHotEncoder
 from sklearn.model_selection import train_test_split
 from cargar_datos import cargar_datos
 
+# Funciones globales 
+def to_str_func(x):
+    return x.astype(str)
+
+def log_func(x):
+    return np.log1p(x)
+
 def ft_engineering():
     # Cargar datos
     df = cargar_datos()
@@ -16,25 +24,6 @@ def ft_engineering():
     # Nuevas variables
         # tiempo por página
     df['tiempo_por_pagina'] = df['time_on_site_sec']/df['pages_viewed']
-
-     # Segmentación de promociones de acuerdo a comportamiento del usuario
-
-    mediana_tiempo = df["time_on_site_sec"].median()
-    df["promocion_1"] = (
-    (df["user_type"] == 0) &
-    (df["added_to_cart"] == 1) &
-    (df['purchased'].astype(int) == 0) &
-    (df["time_on_site_sec"] > mediana_tiempo)
-     )
-    df["promocion_2"] = (
-    (df["user_type"] == 0) &
-    (df["device_type"] == 1) &
-    (df["time_on_site_sec"] > mediana_tiempo)
-        )
-
-    # Conversión de visit_date (texto) a valor numérico (ordinal de fecha)
-    df["visit_date"] = pd.to_datetime(df["visit_date"], format="%d-%m-%Y", errors="coerce")
-    df["visit_date"] = df["visit_date"].map(pd.Timestamp.toordinal)
 
     # Variables seleccionadas para modelación
 
@@ -52,14 +41,11 @@ def ft_engineering():
         "tiempo_por_pagina",
         "added_to_cart",
         "payment_method",
-        "visit_date",
         "visit_day",
         "visit_month",
         "visit_weekday",
         "visit_season",
-        "location",
-        #"promocion_1",
-        #"promocion_2"
+        "location"
         ]
 
     # Definición de features/target split
@@ -81,14 +67,21 @@ def ft_engineering():
     # Variables numéricas (el resto)
     num_features = [col for col in features if col not in cat_features]
 
-    #  Transformación logarítmica solo en discount_amount
+    # Transformación logarítmica solo en discount_amount
     log_transformer = Pipeline(steps=[
-        ('log', FunctionTransformer(np.log1p, validate=False)), 
-        ])
+        (
+            "log",
+            FunctionTransformer(
+                log_func,
+                validate=False,
+                feature_names_out="one-to-one"
+            )
+        )
+    ])
     # Crear Pipelines
     # Pipeline 1 : Variables Categóricas
     cat_transformer = Pipeline(steps=[
-        ('to_str', FunctionTransformer(lambda x: x.astype(str))),
+        ('to_str', FunctionTransformer(to_str_func, feature_names_out="one-to-one")),
         ('onehot', OneHotEncoder(handle_unknown='ignore', sparse_output=False))
     ]
     )
@@ -120,3 +113,24 @@ def ft_engineering():
     X_test_processed = preprocessor.transform(X_test)
 
     return X_train_processed, X_test_processed, y_train, y_test, preprocessor
+
+
+
+# ----------------------------------------------------------------------
+# Guardar preprocessor en src/models
+# ----------------------------------------------------------------------
+# NOTA: la generacion del preprocessor se movio a una funcion (guardar_preprocessor)
+# en vez de ejecutarse directo en __main__. Esto es necesario para que el preprocessor.pkl 
+# pueda cargarse desde otros modulos (como api.py) sin el error
+# "Can't get attribute 'log_func'". Al importar ft_engineering, las funciones
+# log_func y to_str_func quedan referenciadas al modulo y no a __main__.
+def guardar_preprocessor():
+    X_train, X_test, y_train, y_test, preprocessor = ft_engineering()
+    models_dir = os.path.join(os.path.dirname(__file__), "models")
+    os.makedirs(models_dir, exist_ok=True)
+    joblib.dump(preprocessor, os.path.join(models_dir, "preprocessor.pkl"))
+    print("preprocessor.pkl generado correctamente en models/")
+
+if __name__ == "__main__":
+    guardar_preprocessor()
+    

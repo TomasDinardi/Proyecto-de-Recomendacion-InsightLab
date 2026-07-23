@@ -1,0 +1,41 @@
+# Git y control de versiones
+.git
+.gitignore
+.gitattributes
+.github/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.Python
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+MLOps-InsightLab/src/analisis_exploratorio.ipynb
+
+# Docs y archivos que no aportan al runtime
+README.md
+LICENSE
+image.png
+MLOps-InsightLab/images/
+
+# Docker
+Dockerfile*
+docker-compose.yml
+.dockerignore
+
+# Entornos / configs locales
+.env
+.env.*
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
