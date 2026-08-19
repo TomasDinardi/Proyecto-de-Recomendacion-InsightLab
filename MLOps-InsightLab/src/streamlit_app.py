@@ -14,6 +14,7 @@
 
 import streamlit as st
 import requests
+import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -32,7 +33,12 @@ st.set_page_config(
 # ----------------------------------------------------------------------
 # La API debe estar corriendo (uvicorn api:app --reload).
 # Se usa /recommend porque devuelve: probabilidad, prediccion y recomendacion.
-API_RECOMMEND_URL = "http://127.0.0.1:8000/recommend"
+API_BASE_URL = os.getenv(
+    "API_BASE_URL",
+    "http://127.0.0.1:8000"
+)
+
+API_RECOMMEND_URL = f"{API_BASE_URL}/recommend"
 
 # ----------------------------------------------------------------------
 # ESTILOS (CSS) para que se vea mas lindo
@@ -153,7 +159,7 @@ with col_centro:
 
     st.image(
         logo_path,
-        use_container_width=True
+        width="stretch"
     )
 
 st.markdown('<div class="subtitulo">Prediccion de comportamiento de compra en e-commerce</div>', unsafe_allow_html=True)
@@ -326,7 +332,7 @@ def resolver_num(valor_elegido, nombre_var):
 # BOTON 1: PREDECIR COMPRA
 # ----------------------------------------------------------------------
 st.markdown("")  # espacio
-if st.button("PREDECIR COMPRA", use_container_width=True, type="primary"):
+if st.button("PREDECIR COMPRA", width="stretch", type="primary"):
 
     # Resolver coherencia mes <-> temporada
     if visit_month != OPCION_ND:
@@ -414,7 +420,7 @@ if st.session_state.get("resultado"):
     # BOTON 2: VER RECOMENDACION (aparece solo despues de predecir)
     # ------------------------------------------------------------------
     st.markdown("")  # espacio
-    if st.button("VER RECOMENDACION", use_container_width=True):
+    if st.button("VER RECOMENDACION", width="stretch"):
         st.session_state["mostrar_reco"] = True
 
     # Mostrar la recomendacion si se apreto el boton
