@@ -1,3 +1,44 @@
+# InsightLab - Sistema de Predicción y Recomendación
+
+> Sistema de Machine Learning aplicado a e-commerce para predecir intención de compra y generar recomendaciones accionables.
+
+## 🚀 Demo interactiva
+
+**Probá el proyecto directamente desde tu navegador:**
+
+👉 **[Abrir Demo de InsightLab](https://proyecto-de-recomendacion-insightlab-1.onrender.com)**
+
+La demo permite ingresar los datos de una sesión de usuario y obtener:
+
+- 📊 Probabilidad de compra.
+- 🛒 Predicción de compra/no compra.
+- 🎯 Clasificación de intención de compra.
+- 💡 Recomendación de acción comercial.
+- 📈 Información adicional utilizada para generar la recomendación.
+
+### ¿Cómo funciona?
+
+```text
+Datos de sesión
+       ↓
+    Streamlit
+       ↓
+      API
+    FastAPI
+       ↓
+Preprocesamiento
+       ↓
+Modelo ML
+       ↓
+Predicción
+       ↓
+Motor de recomendación
+       ↓
+Reglas de asociación
+       ↓
+Acción comercial
+```
+
 # Documentación - Proyecto de Recomendación InsightLab
 
 ## Descripción general
