@@ -368,20 +368,65 @@ if st.button("PREDECIR COMPRA", width="stretch", type="primary"):
 
     # Llamar a la API (endpoint /recommend, que trae todo)
     try:
-        respuesta = requests.post(API_RECOMMEND_URL, json=datos, timeout=10)
+        respuesta = requests.post(
+            API_RECOMMEND_URL,
+            json=datos,
+            timeout=10
+        )
+
         if respuesta.status_code == 200:
-            # Guardar el resultado en session_state para que el 2do boton lo recuerde
+            # Guardar el resultado en session_state
+            # para que el segundo boton lo recuerde
             st.session_state["resultado"] = respuesta.json()
-            st.session_state["mostrar_reco"] = False  # se resetea al predecir de nuevo
+            st.session_state["mostrar_reco"] = False
+
         else:
             st.session_state["resultado"] = None
-            st.error(f"La API respondio con un error (codigo {respuesta.status_code}).")
-    except requests.exceptions.ConnectionError:
+
+            st.error(
+                f"La API respondió con HTTP {respuesta.status_code}"
+            )
+
+            # Mostrar la respuesta de la API para poder diagnosticar
+            st.write("Respuesta de la API:")
+            st.code(respuesta.text)
+
+            # Mostrar la URL que realmente está utilizando Streamlit
+            st.write("URL utilizada:")
+            st.code(API_RECOMMEND_URL)
+
+    except requests.exceptions.ConnectionError as e:
         st.session_state["resultado"] = None
-        st.error("No se pudo conectar con la API. Verifica que este corriendo (uvicorn api:app --reload).")
+
+        st.error("No se pudo conectar con la API.")
+
+        st.write("URL utilizada:")
+        st.code(API_RECOMMEND_URL)
+
+        st.write("Detalle del error:")
+        st.code(str(e))
+
+    except requests.exceptions.Timeout as e:
+        st.session_state["resultado"] = None
+
+        st.error("La API tardó demasiado en responder.")
+
+        st.write("URL utilizada:")
+        st.code(API_RECOMMEND_URL)
+
+        st.write("Detalle del error:")
+        st.code(str(e))
+
     except Exception as e:
         st.session_state["resultado"] = None
-        st.error(f"Ocurrio un error: {e}")
+
+        st.error("Ocurrió un error inesperado.")
+
+        st.write("URL utilizada:")
+        st.code(API_RECOMMEND_URL)
+
+        st.write("Detalle del error:")
+        st.code(str(e))
 
 # ----------------------------------------------------------------------
 # MOSTRAR RESULTADO DE PREDICCION (si existe en session_state)
