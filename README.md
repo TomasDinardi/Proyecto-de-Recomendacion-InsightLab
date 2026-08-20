@@ -39,6 +39,8 @@ Reglas de asociación
 Acción comercial
 ```
 
+> Nota: La primera carga puede demorar unos segundos debido a que el servicio está desplegado en un entorno gratuito y puede entrar en estado de suspensión cuando no recibe tráfico.
+
 # Documentación - Proyecto de Recomendación InsightLab
 
 ## Descripción general
