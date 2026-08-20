@@ -389,7 +389,7 @@ if st.button("PREDECIR COMPRA", width="stretch", type="primary"):
 
             # Mostrar la respuesta de la API para poder diagnosticar
             st.write("Respuesta de la API:")
-            st.code(respuesta.text)
+            st.code(respuesta.text[:1000])
 
             # Mostrar la URL que realmente está utilizando Streamlit
             st.write("URL utilizada:")
